@@ -21,11 +21,12 @@
 
 form Harmonic Sound Processing
     optionmenu Preset: 1
-        option "Default (2.5 base, 0.6 decay)"
-        option "Soft Harmonics (1.8 base, 0.4 decay)"
-        option "Strong Harmonics (3.5 base, 0.8 decay)"
-        option "Wide Random (1.2–5.0 range)"
         option "Custom"
+        option "Subtle Harmonics"
+        option "Medium Harmonics"
+        option "Heavy Harmonics"
+        option "Extreme Harmonics"
+    positive Tail_duration_(seconds) 2.0
     comment Harmonic processing parameters:
     natural num_iterations 7
     comment Harmonic base range (for randomization):
@@ -38,32 +39,81 @@ form Harmonic Sound Processing
     positive decay_factor 0.6
     comment Output options:
     positive scale_peak 0.95
+    positive Fadeout_duration_(seconds) 1.0
     boolean play_after_processing 1
 endform
 
 # Apply preset if not Custom
-if preset = 1
-    fixed_harmonic_base = 2.5
+if preset = 2
+    # Subtle Harmonics
+    tail_duration = 1.5
+    num_iterations = 4
+    harmonic_base_min = 1.3
+    harmonic_base_max = 2.2
+    use_fixed_base = 0
+    fixed_harmonic_base = 1.8
+    decay_factor = 0.4
+    scale_peak = 0.96
+    fadeout_duration = 0.8
+elsif preset = 3
+    # Medium Harmonics
+    tail_duration = 2.0
+    num_iterations = 7
     harmonic_base_min = 1.5
     harmonic_base_max = 4.0
+    use_fixed_base = 0
+    fixed_harmonic_base = 2.5
     decay_factor = 0.6
-elsif preset = 2
-    fixed_harmonic_base = 1.8
-    harmonic_base_min = 1.2
-    harmonic_base_max = 2.5
-    decay_factor = 0.4
-elsif preset = 3
-    fixed_harmonic_base = 3.5
-    harmonic_base_min = 2.5
-    harmonic_base_max = 4.5
-    decay_factor = 0.8
+    scale_peak = 0.95
+    fadeout_duration = 1.0
 elsif preset = 4
-    harmonic_base_min = 1.2
-    harmonic_base_max = 5.0
+    # Heavy Harmonics
+    tail_duration = 2.8
+    num_iterations = 10
+    harmonic_base_min = 2.0
+    harmonic_base_max = 4.8
+    use_fixed_base = 0
+    fixed_harmonic_base = 3.5
+    decay_factor = 0.75
+    scale_peak = 0.93
+    fadeout_duration = 1.4
+elsif preset = 5
+    # Extreme Harmonics
+    tail_duration = 4.0
+    num_iterations = 15
+    harmonic_base_min = 2.5
+    harmonic_base_max = 6.0
+    use_fixed_base = 0
+    fixed_harmonic_base = 4.5
+    decay_factor = 0.85
+    scale_peak = 0.91
+    fadeout_duration = 1.8
 endif
 
-# Copy the sound object
-Copy... soundObj
+if not selected("Sound")
+    exitScript: "Please select a Sound object first."
+endif
+
+original_sound$ = selected$("Sound")
+select Sound 'original_sound$'
+sampling_rate = Get sample rate
+channels = Get number of channels
+
+# Create silent tail
+if channels = 2
+    Create Sound from formula: "silent_tail", 2, 0, tail_duration, sampling_rate, "0"
+else
+    Create Sound from formula: "silent_tail", 1, 0, tail_duration, sampling_rate, "0"
+endif
+
+# Concatenate
+select Sound 'original_sound$'
+plus Sound silent_tail
+Concatenate
+Rename: "extended_sound"
+
+select Sound extended_sound
+Copy: "soundObj"
 
 # Get the number of samples
 a = Get number of samples
@@ -90,6 +140,21 @@ endfor
 
 # Scale to peak
 Scale peak: scale_peak
+
+# Apply fadeout
+select Sound soundObj
+total_duration = Get total duration
+fade_start = total_duration - fadeout_duration
+Formula: "if x > fade_start then self * (0.5 + 0.5 * cos(pi * (x - fade_start) / 'fadeout_duration')) else self fi"
+
+Rename: original_sound$ + "_harmonics"
+
+# Cleanup
+select Sound silent_tail
+plus Sound extended_sound
+Remove
+
+select Sound 'original_sound$'_harmonics
 
 # Play if requested
 if play_after_processing
