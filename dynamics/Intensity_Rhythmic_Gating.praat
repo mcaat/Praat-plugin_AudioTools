@@ -21,6 +21,12 @@
 
 form Intensity Rhythmic Gating
     comment This script creates rhythmic gating patterns in intensity
+    optionmenu Preset 1
+        option Custom
+        option Subtle Gate
+        option Medium Gate
+        option Heavy Gate
+        option Extreme Gate
     comment Intensity extraction parameters:
     positive minimum_pitch 100
     positive time_step 0.1
@@ -37,43 +43,72 @@ form Intensity Rhythmic Gating
     boolean keep_intermediate_objects 0
 endform
 
+# Apply preset values if not Custom
+if preset = 2
+    # Subtle Gate
+    minimum_pitch = 100
+    time_step = 0.1
+    subtract_mean = 1
+    gate_frequency = 4
+    minimum_level = 0.5
+    maximum_level = 1.0
+    scale_intensities = 1
+elsif preset = 3
+    # Medium Gate
+    minimum_pitch = 100
+    time_step = 0.1
+    subtract_mean = 1
+    gate_frequency = 8
+    minimum_level = 0.3
+    maximum_level = 1.0
+    scale_intensities = 1
+elsif preset = 4
+    # Heavy Gate
+    minimum_pitch = 100
+    time_step = 0.1
+    subtract_mean = 1
+    gate_frequency = 12
+    minimum_level = 0.15
+    maximum_level = 1.0
+    scale_intensities = 1
+elsif preset = 5
+    # Extreme Gate
+    minimum_pitch = 100
+    time_step = 0.1
+    subtract_mean = 1
+    gate_frequency = 16
+    minimum_level = 0.05
+    maximum_level = 1.0
+    scale_intensities = 1
+endif
+
 # Check if a Sound is selected
 if not selected("Sound")
     exitScript: "Please select a Sound object first."
 endif
-
 # Store original sound
 a = selected("Sound")
 originalName$ = selected$("Sound")
-
 # Copy the sound
 b = Copy: originalName$ + "_gated"
-
 # Extract intensity
 To Intensity: minimum_pitch, time_step, subtract_mean
-
 # Calculate gate depth
 gate_depth = maximum_level - minimum_level
-
 # Apply rhythmic gating formula
 Formula: "self * ('minimum_level' + 'gate_depth' * (sin(x * 'gate_frequency') > 0))"
-
 # Convert to IntensityTier
 c = Down to IntensityTier
-
 # Select sound and intensity tier, then multiply
 select a
 plus c
 Multiply: scale_intensities
-
 # Rename result
 Rename: originalName$ + "_result"
-
 # Play if requested
 if play_after_processing
     Play
 endif
-
 # Clean up intermediate objects unless requested to keep
 if not keep_intermediate_objects
     select b
@@ -81,5 +116,3 @@ if not keep_intermediate_objects
     select c
     Remove
 endif
-
-

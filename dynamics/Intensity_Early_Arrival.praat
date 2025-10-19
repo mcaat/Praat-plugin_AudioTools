@@ -21,6 +21,12 @@
 
 form Intensity Early Arrival
     comment This script shifts the intensity envelope earlier in time
+    optionmenu Preset 1
+        option Custom
+        option Subtle Early
+        option Medium Early
+        option Heavy Early
+        option Extreme Early
     comment Intensity extraction parameters:
     positive minimum_pitch 100
     positive time_step 0.1
@@ -35,40 +41,62 @@ form Intensity Early Arrival
     boolean keep_intermediate_objects 0
 endform
 
+# Apply preset values if not Custom
+if preset = 2
+    # Subtle Early
+    minimum_pitch = 100
+    time_step = 0.08
+    subtract_mean = 1
+    shift_amount_seconds = -0.15
+    scale_intensities = 1
+elsif preset = 3
+    # Medium Early
+    minimum_pitch = 100
+    time_step = 0.1
+    subtract_mean = 1
+    shift_amount_seconds = -0.3
+    scale_intensities = 1
+elsif preset = 4
+    # Heavy Early
+    minimum_pitch = 100
+    time_step = 0.12
+    subtract_mean = 1
+    shift_amount_seconds = -0.5
+    scale_intensities = 1
+elsif preset = 5
+    # Extreme Early
+    minimum_pitch = 100
+    time_step = 0.15
+    subtract_mean = 1
+    shift_amount_seconds = -0.8
+    scale_intensities = 1
+endif
+
 # Check if a Sound is selected
 if not selected("Sound")
     exitScript: "Please select a Sound object first."
 endif
-
 # Store original sound
 a = selected("Sound")
 originalName$ = selected$("Sound")
-
 # Copy the sound
 b = Copy: originalName$ + "_intensity_shifted"
-
 # Extract intensity
 To Intensity: minimum_pitch, time_step, subtract_mean
-
 # Shift intensity curve in time
 Shift times to: "start time", shift_amount_seconds
-
 # Convert to IntensityTier
 c = Down to IntensityTier
-
 # Select sound and intensity tier, then multiply
 select a
 plus c
 Multiply: scale_intensities
-
 # Rename result
 Rename: originalName$ + "_result"
-
 # Play if requested
 if play_after_processing
     Play
 endif
-
 # Clean up intermediate objects unless requested to keep
 if not keep_intermediate_objects
     select b

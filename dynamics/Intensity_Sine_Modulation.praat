@@ -21,6 +21,12 @@
 
 form Intensity Sine Modulation
     comment This script modulates intensity with a sine wave
+    optionmenu Preset 1
+        option Custom
+        option Subtle Modulation
+        option Medium Modulation
+        option Heavy Modulation
+        option Extreme Modulation
     comment Intensity extraction parameters:
     positive minimum_pitch 100
     positive time_step 0.1
@@ -37,40 +43,70 @@ form Intensity Sine Modulation
     boolean keep_intermediate_objects 0
 endform
 
+# Apply preset values if not Custom
+if preset = 2
+    # Subtle Modulation
+    minimum_pitch = 100
+    time_step = 0.1
+    subtract_mean = 1
+    modulation_frequency = 5
+    modulation_center = 0.7
+    modulation_depth = 0.2
+    scale_intensities = 1
+elsif preset = 3
+    # Medium Modulation
+    minimum_pitch = 100
+    time_step = 0.1
+    subtract_mean = 1
+    modulation_frequency = 10
+    modulation_center = 0.5
+    modulation_depth = 0.5
+    scale_intensities = 1
+elsif preset = 4
+    # Heavy Modulation
+    minimum_pitch = 100
+    time_step = 0.1
+    subtract_mean = 1
+    modulation_frequency = 15
+    modulation_center = 0.5
+    modulation_depth = 0.45
+    scale_intensities = 1
+elsif preset = 5
+    # Extreme Modulation
+    minimum_pitch = 100
+    time_step = 0.1
+    subtract_mean = 1
+    modulation_frequency = 25
+    modulation_center = 0.5
+    modulation_depth = 0.48
+    scale_intensities = 1
+endif
+
 # Check if a Sound is selected
 if not selected("Sound")
     exitScript: "Please select a Sound object first."
 endif
-
 # Store original sound
 a = selected("Sound")
 originalName$ = selected$("Sound")
-
 # Copy the sound
 b = Copy: originalName$ + "_sine_modulated"
-
 # Extract intensity
 To Intensity: minimum_pitch, time_step, subtract_mean
-
 # Apply sine wave modulation
 Formula: "self * ('modulation_center' + 'modulation_depth' * sin(x * 'modulation_frequency'))"
-
 # Convert to IntensityTier
 c = Down to IntensityTier
-
 # Select sound and intensity tier, then multiply
 select a
 plus c
 Multiply: scale_intensities
-
 # Rename result
 Rename: originalName$ + "_result"
-
 # Play if requested
 if play_after_processing
     Play
 endif
-
 # Clean up intermediate objects unless requested to keep
 if not keep_intermediate_objects
     select b
