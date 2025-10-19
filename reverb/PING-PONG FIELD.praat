@@ -21,6 +21,12 @@
 
 form Ping-Pong Field Stereo
     comment This script creates stereo ping-pong delays with high-frequency sparkle
+    optionmenu Preset 1
+        option Custom
+        option Subtle Ping-Pong
+        option Medium Ping-Pong
+        option Heavy Ping-Pong
+        option Extreme Ping-Pong
     positive tail_duration_seconds 2
     natural number_of_echoes 90
     positive base_amplitude 0.25
@@ -34,6 +40,61 @@ form Ping-Pong Field Stereo
     positive fadeout_duration 1.0
     boolean play_after_processing 1
 endform
+
+# Apply preset values if not Custom
+if preset = 2
+    # Subtle Ping-Pong
+    tail_duration_seconds = 1.5
+    number_of_echoes = 50
+    base_amplitude = 0.18
+    min_delay = 0.025
+    max_delay = 0.8
+    decay_factor = 0.96
+    ping_pong_offset = 0.002
+    jitter_amount = 0.003
+    hf_sparkle = 0.2
+    scale_every_n_iterations = 15
+    fadeout_duration = 0.8
+elsif preset = 3
+    # Medium Ping-Pong
+    tail_duration_seconds = 2
+    number_of_echoes = 90
+    base_amplitude = 0.25
+    min_delay = 0.02
+    max_delay = 1.20
+    decay_factor = 0.95
+    ping_pong_offset = 0.003
+    jitter_amount = 0.004
+    hf_sparkle = 0.3
+    scale_every_n_iterations = 20
+    fadeout_duration = 1.0
+elsif preset = 4
+    # Heavy Ping-Pong
+    tail_duration_seconds = 2.5
+    number_of_echoes = 130
+    base_amplitude = 0.3
+    min_delay = 0.015
+    max_delay = 1.6
+    decay_factor = 0.94
+    ping_pong_offset = 0.004
+    jitter_amount = 0.006
+    hf_sparkle = 0.4
+    scale_every_n_iterations = 25
+    fadeout_duration = 1.4
+elsif preset = 5
+    # Extreme Ping-Pong
+    tail_duration_seconds = 3.5
+    number_of_echoes = 180
+    base_amplitude = 0.35
+    min_delay = 0.01
+    max_delay = 2.2
+    decay_factor = 0.93
+    ping_pong_offset = 0.006
+    jitter_amount = 0.008
+    hf_sparkle = 0.5
+    scale_every_n_iterations = 30
+    fadeout_duration = 1.8
+endif
 
 if not selected("Sound")
     exitScript: "Please select a Sound object first."

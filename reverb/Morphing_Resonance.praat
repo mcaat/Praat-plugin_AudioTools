@@ -21,6 +21,12 @@
 
 form Morphing Resonance Stereo
     comment This script creates frequency-morphing resonance with chorus
+    optionmenu Preset 1
+        option Custom
+        option Subtle Morphing
+        option Medium Morphing
+        option Heavy Morphing
+        option Extreme Morphing
     positive tail_duration_seconds 2
     positive poisson_density 1800
     positive pulse_width 0.055
@@ -36,6 +42,69 @@ form Morphing Resonance Stereo
     positive scale_peak 0.9
     boolean play_after_processing 1
 endform
+
+# Apply preset values if not Custom
+if preset = 2
+    # Subtle Morphing
+    tail_duration_seconds = 1.5
+    poisson_density = 1200
+    pulse_width = 0.045
+    pulse_period = 2600
+    exponential_base = 95
+    modulation_depth = 0.35
+    frequency_start = 180
+    frequency_range = 600
+    convolution_mix = 0.22
+    chorus_mix = 0.2
+    chorus_delay_seconds = 0.008
+    fadeout_duration = 0.8
+    scale_peak = 0.92
+elsif preset = 3
+    # Medium Morphing
+    tail_duration_seconds = 2
+    poisson_density = 1800
+    pulse_width = 0.055
+    pulse_period = 2200
+    exponential_base = 85
+    modulation_depth = 0.5
+    frequency_start = 220
+    frequency_range = 880
+    convolution_mix = 0.32
+    chorus_mix = 0.3
+    chorus_delay_seconds = 0.01
+    fadeout_duration = 1.0
+    scale_peak = 0.9
+elsif preset = 4
+    # Heavy Morphing
+    tail_duration_seconds = 2.5
+    poisson_density = 2400
+    pulse_width = 0.065
+    pulse_period = 1900
+    exponential_base = 75
+    modulation_depth = 0.65
+    frequency_start = 260
+    frequency_range = 1150
+    convolution_mix = 0.42
+    chorus_mix = 0.4
+    chorus_delay_seconds = 0.012
+    fadeout_duration = 1.4
+    scale_peak = 0.88
+elsif preset = 5
+    # Extreme Morphing
+    tail_duration_seconds = 3.5
+    poisson_density = 3200
+    pulse_width = 0.08
+    pulse_period = 1600
+    exponential_base = 65
+    modulation_depth = 0.8
+    frequency_start = 300
+    frequency_range = 1500
+    convolution_mix = 0.52
+    chorus_mix = 0.5
+    chorus_delay_seconds = 0.015
+    fadeout_duration = 1.8
+    scale_peak = 0.86
+endif
 
 if not selected("Sound")
     exitScript: "Please select a Sound object first."

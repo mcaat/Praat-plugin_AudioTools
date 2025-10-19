@@ -21,12 +21,49 @@
 
 form Temporal Erosion Effect
     comment Apply temporal erosion reverb with logarithmic decay
+    optionmenu Preset 1
+        option Custom
+        option Subtle Erosion
+        option Medium Erosion
+        option Heavy Erosion
+        option Extreme Erosion
     positive Tail_duration_(seconds) 3.0
     positive Impulse_duration_(seconds) 5.0
     positive Poisson_density_(events/s) 2500
     positive Wet_level 0.28
     positive Fadeout_duration_(seconds) 1.2
 endform
+
+# Apply preset values if not Custom
+if preset = 2
+    # Subtle Erosion
+    tail_duration = 2.0
+    impulse_duration = 3.0
+    poisson_density = 1500
+    wet_level = 0.15
+    fadeout_duration = 1.0
+elsif preset = 3
+    # Medium Erosion
+    tail_duration = 3.0
+    impulse_duration = 5.0
+    poisson_density = 2500
+    wet_level = 0.28
+    fadeout_duration = 1.2
+elsif preset = 4
+    # Heavy Erosion
+    tail_duration = 4.0
+    impulse_duration = 7.0
+    poisson_density = 4000
+    wet_level = 0.4
+    fadeout_duration = 1.5
+elsif preset = 5
+    # Extreme Erosion
+    tail_duration = 5.0
+    impulse_duration = 10.0
+    poisson_density = 6000
+    wet_level = 0.55
+    fadeout_duration = 2.0
+endif
 
 original_sound$ = selected$("Sound")
 select Sound 'original_sound$'

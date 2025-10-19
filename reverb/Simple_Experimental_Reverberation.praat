@@ -22,6 +22,12 @@
 form Smooth Cosmic Reverb Effect
     comment Apply a smooth, modulated cosmic reverb effect
     comment 
+    optionmenu Preset 1
+        option Custom
+        option Subtle Cosmic
+        option Medium Cosmic
+        option Heavy Cosmic
+        option Extreme Cosmic
     positive Tail_duration_(seconds) 2.0
     comment 
     comment === Main Effect Parameters ===
@@ -51,6 +57,89 @@ form Smooth Cosmic Reverb Effect
     positive Fadeout_duration_(seconds) 1.2
     positive Final_peak_level 0.98
 endform
+
+# Apply preset values if not Custom
+if preset = 2
+    # Subtle Cosmic
+    tail_duration = 1.5
+    number_of_delays = 25
+    base_amplitude = 0.15
+    decay_factor = 0.97
+    delay_start = 0.05
+    delay_range = 0.3
+    delay_modulation_depth = 0.05
+    right_base_amplitude = 0.14
+    right_decay_factor = 0.97
+    right_delay_start = 0.06
+    right_delay_range = 0.28
+    right_delay_modulation_depth = 0.04
+    amplitude_modulation_depth = 0.15
+    modulation_frequency_factor = 0.4
+    high_frequency_enhancement = 0.05
+    hF_enhancement_decay_rate = 3.0
+    fadeout_duration = 1.0
+    final_peak_level = 0.98
+elsif preset = 3
+    # Medium Cosmic
+    tail_duration = 2.0
+    number_of_delays = 45
+    base_amplitude = 0.22
+    decay_factor = 0.96
+    delay_start = 0.08
+    delay_range = 0.5
+    delay_modulation_depth = 0.08
+    right_base_amplitude = 0.20
+    right_decay_factor = 0.95
+    right_delay_start = 0.09
+    right_delay_range = 0.48
+    right_delay_modulation_depth = 0.07
+    amplitude_modulation_depth = 0.2
+    modulation_frequency_factor = 0.5
+    high_frequency_enhancement = 0.08
+    hF_enhancement_decay_rate = 4.0
+    fadeout_duration = 1.2
+    final_peak_level = 0.98
+elsif preset = 4
+    # Heavy Cosmic
+    tail_duration = 3.0
+    number_of_delays = 70
+    base_amplitude = 0.28
+    decay_factor = 0.95
+    delay_start = 0.1
+    delay_range = 0.75
+    delay_modulation_depth = 0.12
+    right_base_amplitude = 0.26
+    right_decay_factor = 0.94
+    right_delay_start = 0.11
+    right_delay_range = 0.72
+    right_delay_modulation_depth = 0.11
+    amplitude_modulation_depth = 0.3
+    modulation_frequency_factor = 0.65
+    high_frequency_enhancement = 0.12
+    hF_enhancement_decay_rate = 5.0
+    fadeout_duration = 1.8
+    final_peak_level = 0.98
+elsif preset = 5
+    # Extreme Cosmic
+    tail_duration = 4.5
+    number_of_delays = 100
+    base_amplitude = 0.35
+    decay_factor = 0.94
+    delay_start = 0.12
+    delay_range = 1.2
+    delay_modulation_depth = 0.18
+    right_base_amplitude = 0.33
+    right_decay_factor = 0.93
+    right_delay_start = 0.13
+    right_delay_range = 1.15
+    right_delay_modulation_depth = 0.16
+    amplitude_modulation_depth = 0.4
+    modulation_frequency_factor = 0.8
+    high_frequency_enhancement = 0.15
+    hF_enhancement_decay_rate = 6.0
+    fadeout_duration = 2.5
+    final_peak_level = 0.98
+endif
 
 original_sound$ = selected$("Sound")
 select Sound 'original_sound$'

@@ -21,6 +21,12 @@
 
 form Quantum Flutter Stereo
     comment This script creates reverse exponential crescendo with triple layers
+    optionmenu Preset 1
+        option Custom
+        option Subtle Flutter
+        option Medium Flutter
+        option Heavy Flutter
+        option Extreme Flutter
     positive tail_duration_seconds 1
     positive poisson_density 800
     positive pulse_width 0.08
@@ -34,6 +40,61 @@ form Quantum Flutter Stereo
     positive fadeout_duration 1.0
     boolean play_after_processing 1
 endform
+
+# Apply preset values if not Custom
+if preset = 2
+    # Subtle Flutter
+    tail_duration_seconds = 0.8
+    poisson_density = 500
+    pulse_width = 0.06
+    pulse_period = 1400
+    exponential_base = 100
+    modulation_depth = 0.4
+    modulation_frequency = 45
+    convolution_mix = 0.22
+    layer2_amplitude = 0.65
+    scale_peak = 0.9
+    fadeout_duration = 0.8
+elsif preset = 3
+    # Medium Flutter
+    tail_duration_seconds = 1
+    poisson_density = 800
+    pulse_width = 0.08
+    pulse_period = 1200
+    exponential_base = 120
+    modulation_depth = 0.6
+    modulation_frequency = 60
+    convolution_mix = 0.35
+    layer2_amplitude = 0.7
+    scale_peak = 0.88
+    fadeout_duration = 1.0
+elsif preset = 4
+    # Heavy Flutter
+    tail_duration_seconds = 1.4
+    poisson_density = 1100
+    pulse_width = 0.1
+    pulse_period = 1000
+    exponential_base = 140
+    modulation_depth = 0.75
+    modulation_frequency = 75
+    convolution_mix = 0.45
+    layer2_amplitude = 0.75
+    scale_peak = 0.86
+    fadeout_duration = 1.3
+elsif preset = 5
+    # Extreme Flutter
+    tail_duration_seconds = 1.8
+    poisson_density = 1500
+    pulse_width = 0.12
+    pulse_period = 850
+    exponential_base = 160
+    modulation_depth = 0.85
+    modulation_frequency = 90
+    convolution_mix = 0.55
+    layer2_amplitude = 0.8
+    scale_peak = 0.84
+    fadeout_duration = 1.6
+endif
 
 if not selected("Sound")
     exitScript: "Please select a Sound object first."

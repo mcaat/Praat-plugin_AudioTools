@@ -21,6 +21,12 @@
 
 form Temporal Warping Effect
     comment Apply temporal warping with progressive time displacement
+    optionmenu Preset 1
+        option Custom
+        option Subtle Warp
+        option Medium Warp
+        option Heavy Warp
+        option Extreme Warp
     positive Tail_duration_(seconds) 3.0
     positive Number_of_warp_stages 6
     positive Max_displacement_factor 0.1
@@ -28,26 +34,53 @@ form Temporal Warping Effect
     positive Fadeout_duration_(seconds) 1.2
 endform
 
+# Apply preset values if not Custom
+if preset = 2
+    # Subtle Warp
+    tail_duration = 2.0
+    number_of_warp_stages = 4
+    max_displacement_factor = 0.05
+    warp_strength = 0.15
+    fadeout_duration = 1.0
+elsif preset = 3
+    # Medium Warp
+    tail_duration = 3.0
+    number_of_warp_stages = 6
+    max_displacement_factor = 0.1
+    warp_strength = 0.3
+    fadeout_duration = 1.2
+elsif preset = 4
+    # Heavy Warp
+    tail_duration = 4.0
+    number_of_warp_stages = 8
+    max_displacement_factor = 0.2
+    warp_strength = 0.5
+    fadeout_duration = 1.5
+elsif preset = 5
+    # Extreme Warp
+    tail_duration = 5.0
+    number_of_warp_stages = 12
+    max_displacement_factor = 0.35
+    warp_strength = 0.7
+    fadeout_duration = 2.0
+endif
+
 original_sound$ = selected$("Sound")
 select Sound 'original_sound$'
 original_duration = Get total duration
 sampling_rate = Get sample rate
 channels = Get number of channels
-
 tail_duration = tail_duration
 if channels = 2
     Create Sound from formula: "silent_tail", 2, 0, tail_duration, sampling_rate, "0"
 else
     Create Sound from formula: "silent_tail", 1, 0, tail_duration, sampling_rate, "0"
 endif
-
 select Sound 'original_sound$'
 plus Sound silent_tail
 Concatenate
 Rename: "extended_sound"
-
 select Sound extended_sound
-
 if channels = 2
     Extract one channel: 1
     Rename: "left_channel"
@@ -118,14 +151,11 @@ else
     
     removeObject: "Sound soundObj"
 endif
-
 select Sound temporal_warping_stereo
 total_duration = Get total duration
 fade_duration = fadeout_duration
 fade_start = total_duration - fade_duration
-
 Formula: "if x > 'fade_start' then self * (0.5 + 0.5 * cos(pi * (x - 'fade_start') / 'fade_duration')) else self fi"
-
 select Sound silent_tail
 plus Sound extended_sound
 if channels = 2
@@ -133,6 +163,5 @@ if channels = 2
     plus Sound right_channel
 endif
 Remove
-
 select Sound temporal_warping_stereo
 Play

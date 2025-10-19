@@ -21,6 +21,12 @@
 
 form Quantum Uncertainty Stereo
     comment This script simulates quantum state collapse in reverb delays
+    optionmenu Preset 1
+        option Custom
+        option Subtle Quantum
+        option Medium Quantum
+        option Heavy Quantum
+        option Extreme Quantum
     positive tail_duration_seconds 1
     natural quantum_states 35
     positive uncertainty_stddev 0.35
@@ -36,6 +42,65 @@ form Quantum Uncertainty Stereo
     positive fadeout_duration 1.0
     boolean play_after_processing 1
 endform
+
+# Apply preset values if not Custom
+if preset = 2
+    # Subtle Quantum
+    tail_duration_seconds = 0.8
+    quantum_states = 20
+    uncertainty_stddev = 0.25
+    collapse_threshold = 0.7
+    base_amplitude = 0.18
+    time_mean = 0.12
+    min_delay_offset = 0.015
+    state_decay_min = 0.75
+    state_decay_range = 0.25
+    substates = 3
+    substate_jitter = 0.01
+    fadeout_duration = 0.8
+elsif preset = 3
+    # Medium Quantum
+    tail_duration_seconds = 1
+    quantum_states = 35
+    uncertainty_stddev = 0.35
+    collapse_threshold = 0.65
+    base_amplitude = 0.25
+    time_mean = 0.18
+    min_delay_offset = 0.02
+    state_decay_min = 0.7
+    state_decay_range = 0.3
+    substates = 4
+    substate_jitter = 0.015
+    fadeout_duration = 1.0
+elsif preset = 4
+    # Heavy Quantum
+    tail_duration_seconds = 1.3
+    quantum_states = 45
+    uncertainty_stddev = 0.42
+    collapse_threshold = 0.62
+    base_amplitude = 0.28
+    time_mean = 0.22
+    min_delay_offset = 0.022
+    state_decay_min = 0.72
+    state_decay_range = 0.28
+    substates = 5
+    substate_jitter = 0.018
+    fadeout_duration = 1.3
+elsif preset = 5
+    # Extreme Quantum
+    tail_duration_seconds = 1.8
+    quantum_states = 60
+    uncertainty_stddev = 0.5
+    collapse_threshold = 0.6
+    base_amplitude = 0.3
+    time_mean = 0.28
+    min_delay_offset = 0.025
+    state_decay_min = 0.74
+    state_decay_range = 0.26
+    substates = 6
+    substate_jitter = 0.022
+    fadeout_duration = 1.6
+endif
 
 if not selected("Sound")
     exitScript: "Please select a Sound object first."

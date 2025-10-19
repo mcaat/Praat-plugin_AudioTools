@@ -21,6 +21,12 @@
 
 form Spectral Drift Effect
     comment Apply spectral drift processing with frequency-dependent delays
+    optionmenu Preset 1
+        option Custom
+        option Subtle Drift
+        option Medium Drift
+        option Heavy Drift
+        option Extreme Drift
     positive Tail_duration_(seconds) 0.5
     positive Number_of_drift_cycles 4
     positive Base_frequency_(Hz) 100
@@ -28,26 +34,53 @@ form Spectral Drift Effect
     positive Fadeout_duration_(seconds) 1.2
 endform
 
+# Apply preset values if not Custom
+if preset = 2
+    # Subtle Drift
+    tail_duration = 0.3
+    number_of_drift_cycles = 2
+    base_frequency = 150
+    effect_strength = 0.2
+    fadeout_duration = 0.8
+elsif preset = 3
+    # Medium Drift
+    tail_duration = 0.5
+    number_of_drift_cycles = 4
+    base_frequency = 100
+    effect_strength = 0.4
+    fadeout_duration = 1.2
+elsif preset = 4
+    # Heavy Drift
+    tail_duration = 0.8
+    number_of_drift_cycles = 6
+    base_frequency = 75
+    effect_strength = 0.6
+    fadeout_duration = 1.5
+elsif preset = 5
+    # Extreme Drift
+    tail_duration = 1.2
+    number_of_drift_cycles = 10
+    base_frequency = 50
+    effect_strength = 0.8
+    fadeout_duration = 2.0
+endif
+
 original_sound$ = selected$("Sound")
 select Sound 'original_sound$'
 original_duration = Get total duration
 sampling_rate = Get sample rate
 channels = Get number of channels
-
 tail_duration = tail_duration
 if channels = 2
     Create Sound from formula: "silent_tail", 2, 0, tail_duration, sampling_rate, "0"
 else
     Create Sound from formula: "silent_tail", 1, 0, tail_duration, sampling_rate, "0"
 endif
-
 select Sound 'original_sound$'
 plus Sound silent_tail
 Concatenate
 Rename: "extended_sound"
-
 select Sound extended_sound
-
 if channels = 2
     Extract one channel: 1
     Rename: "left_channel"
@@ -118,14 +151,11 @@ else
     
     removeObject: "Sound soundObj"
 endif
-
 select Sound spectral_drift_stereo
 total_duration = Get total duration
 fade_duration = fadeout_duration
 fade_start = total_duration - fade_duration
-
 Formula: "if x > 'fade_start' then self * (0.5 + 0.5 * cos(pi * (x - 'fade_start') / 'fade_duration')) else self fi"
-
 select Sound silent_tail
 plus Sound extended_sound
 if channels = 2
@@ -133,6 +163,5 @@ if channels = 2
     plus Sound right_channel
 endif
 Remove
-
 select Sound spectral_drift_stereo
 Play

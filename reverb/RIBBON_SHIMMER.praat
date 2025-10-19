@@ -22,6 +22,12 @@
 form Ribbon Shimmer Effect
     comment Apply a lush reverb-like shimmer effect to the selected sound
     comment 
+    optionmenu Preset 1
+        option Custom
+        option Subtle Ribbon
+        option Medium Ribbon
+        option Heavy Ribbon
+        option Extreme Ribbon
     positive Tail_duration_(seconds) 0.5
     comment 
     comment === Effect Parameters ===
@@ -40,6 +46,61 @@ form Ribbon Shimmer Effect
     comment === Fade Out ===
     positive Fadeout_duration_(seconds) 1.0
 endform
+
+# Apply preset values if not Custom
+if preset = 2
+    # Subtle Ribbon
+    tail_duration = 0.3
+    number_of_delays = 50
+    base_amplitude = 0.16
+    minimum_delay = 0.012
+    maximum_delay = 0.8
+    decay_factor = 0.965
+    right_channel_base_amplitude = 0.15
+    right_channel_min_delay = 0.013
+    right_channel_max_delay = 0.78
+    right_channel_decay_factor = 0.964
+    fadeout_duration = 0.8
+elsif preset = 3
+    # Medium Ribbon
+    tail_duration = 0.5
+    number_of_delays = 95
+    base_amplitude = 0.24
+    minimum_delay = 0.015
+    maximum_delay = 1.35
+    decay_factor = 0.955
+    right_channel_base_amplitude = 0.23
+    right_channel_min_delay = 0.017
+    right_channel_max_delay = 1.32
+    right_channel_decay_factor = 0.95
+    fadeout_duration = 1.0
+elsif preset = 4
+    # Heavy Ribbon
+    tail_duration = 0.8
+    number_of_delays = 140
+    base_amplitude = 0.3
+    minimum_delay = 0.012
+    maximum_delay = 1.8
+    decay_factor = 0.945
+    right_channel_base_amplitude = 0.29
+    right_channel_min_delay = 0.014
+    right_channel_max_delay = 1.75
+    right_channel_decay_factor = 0.94
+    fadeout_duration = 1.4
+elsif preset = 5
+    # Extreme Ribbon
+    tail_duration = 1.2
+    number_of_delays = 200
+    base_amplitude = 0.38
+    minimum_delay = 0.01
+    maximum_delay = 2.5
+    decay_factor = 0.935
+    right_channel_base_amplitude = 0.36
+    right_channel_min_delay = 0.011
+    right_channel_max_delay = 2.4
+    right_channel_decay_factor = 0.93
+    fadeout_duration = 1.8
+endif
 
 original_sound$ = selected$("Sound")
 select Sound 'original_sound$'
@@ -192,4 +253,3 @@ Remove
 # At this point, only the original sound and the final result remain
 select Sound ribbon_shimmer_stereo
 Play
-

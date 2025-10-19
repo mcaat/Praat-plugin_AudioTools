@@ -21,6 +21,12 @@
 
 form Spectral Decay Reverb Effect
     comment Apply spectral decay reverb using Poisson process convolution
+    optionmenu Preset 1
+        option Custom
+        option Subtle Decay
+        option Medium Decay
+        option Heavy Decay
+        option Extreme Decay
     positive Tail_duration_(seconds) 2.0
     positive Impulse_duration_(seconds) 3.0
     positive Poisson_density_(events/s) 2000
@@ -28,6 +34,41 @@ form Spectral Decay Reverb Effect
     positive Wet_level 0.25
     positive Fadeout_duration_(seconds) 1.2
 endform
+
+# Apply preset values if not Custom
+if preset = 2
+    # Subtle Decay
+    tail_duration = 1.5
+    impulse_duration = 2.0
+    poisson_density = 1200
+    decay_base = 150
+    wet_level = 0.15
+    fadeout_duration = 0.8
+elsif preset = 3
+    # Medium Decay
+    tail_duration = 2.0
+    impulse_duration = 3.0
+    poisson_density = 2000
+    decay_base = 110
+    wet_level = 0.25
+    fadeout_duration = 1.2
+elsif preset = 4
+    # Heavy Decay
+    tail_duration = 3.0
+    impulse_duration = 4.5
+    poisson_density = 3000
+    decay_base = 80
+    wet_level = 0.38
+    fadeout_duration = 1.8
+elsif preset = 5
+    # Extreme Decay
+    tail_duration = 4.5
+    impulse_duration = 6.5
+    poisson_density = 4500
+    decay_base = 50
+    wet_level = 0.5
+    fadeout_duration = 2.5
+endif
 
 original_sound$ = selected$("Sound")
 select Sound 'original_sound$'

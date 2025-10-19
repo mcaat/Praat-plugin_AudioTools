@@ -21,6 +21,12 @@
 
 form Gravitational Lens Stereo
     comment This script simulates gravitational lensing effects on delays
+    optionmenu Preset 1
+        option Custom
+        option Subtle Lensing
+        option Medium Lensing
+        option Heavy Lensing
+        option Extreme Lensing
     positive tail_duration_seconds 4
     natural mass_points 12
     natural rays_per_mass 8
@@ -34,6 +40,61 @@ form Gravitational Lens Stereo
     positive fadeout_duration 1.0
     boolean play_after_processing 1
 endform
+
+# Apply preset values if not Custom
+if preset = 2
+    # Subtle Lensing
+    tail_duration_seconds = 2.5
+    mass_points = 6
+    rays_per_mass = 5
+    space_curvature = 0.5
+    mass_strength_mean = 0.8
+    mass_strength_stddev = 0.3
+    ray_delay_start = 0.06
+    ray_delay_increment = 0.08
+    lensing_amplitude = 0.12
+    time_dilation_factor = 0.1
+    fadeout_duration = 0.8
+elsif preset = 3
+    # Medium Lensing
+    tail_duration_seconds = 4
+    mass_points = 12
+    rays_per_mass = 8
+    space_curvature = 0.8
+    mass_strength_mean = 1.2
+    mass_strength_stddev = 0.5
+    ray_delay_start = 0.05
+    ray_delay_increment = 0.06
+    lensing_amplitude = 0.16
+    time_dilation_factor = 0.15
+    fadeout_duration = 1.0
+elsif preset = 4
+    # Heavy Lensing
+    tail_duration_seconds = 5.5
+    mass_points = 18
+    rays_per_mass = 12
+    space_curvature = 1.1
+    mass_strength_mean = 1.6
+    mass_strength_stddev = 0.7
+    ray_delay_start = 0.04
+    ray_delay_increment = 0.05
+    lensing_amplitude = 0.2
+    time_dilation_factor = 0.2
+    fadeout_duration = 1.4
+elsif preset = 5
+    # Extreme Lensing
+    tail_duration_seconds = 7.5
+    mass_points = 25
+    rays_per_mass = 16
+    space_curvature = 1.5
+    mass_strength_mean = 2.0
+    mass_strength_stddev = 0.9
+    ray_delay_start = 0.03
+    ray_delay_increment = 0.04
+    lensing_amplitude = 0.24
+    time_dilation_factor = 0.25
+    fadeout_duration = 1.8
+endif
 
 if not selected("Sound")
     exitScript: "Please select a Sound object first."

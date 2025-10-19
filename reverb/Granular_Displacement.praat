@@ -21,6 +21,12 @@
 
 form Granular Displacement
     comment This script applies different delays to time segments
+    optionmenu Preset 1
+        option Custom
+        option Subtle Granular
+        option Medium Granular
+        option Heavy Granular
+        option Extreme Granular
     positive tail_duration_seconds 2
     natural number_of_grains 8
     comment Delay range (in samples):
@@ -34,30 +40,64 @@ form Granular Displacement
     boolean play_after_processing 1
 endform
 
+# Apply preset values if not Custom
+if preset = 2
+    # Subtle Granular
+    tail_duration_seconds = 1.5
+    number_of_grains = 5
+    delay_min = 8
+    delay_divisor = 5
+    amplitude_min = 0.15
+    amplitude_max = 0.6
+    scale_peak = 0.99
+elsif preset = 3
+    # Medium Granular
+    tail_duration_seconds = 2
+    number_of_grains = 8
+    delay_min = 10
+    delay_divisor = 4
+    amplitude_min = 0.2
+    amplitude_max = 0.8
+    scale_peak = 0.99
+elsif preset = 4
+    # Heavy Granular
+    tail_duration_seconds = 2.5
+    number_of_grains = 12
+    delay_min = 12
+    delay_divisor = 3
+    amplitude_min = 0.25
+    amplitude_max = 0.95
+    scale_peak = 0.98
+elsif preset = 5
+    # Extreme Granular
+    tail_duration_seconds = 3.5
+    number_of_grains = 18
+    delay_min = 15
+    delay_divisor = 2.5
+    amplitude_min = 0.3
+    amplitude_max = 1.1
+    scale_peak = 0.97
+endif
+
 if not selected("Sound")
     exitScript: "Please select a Sound object first."
 endif
-
 original_sound$ = selected$("Sound")
 select Sound 'original_sound$'
 sampling_rate = Get sample rate
 channels = Get number of channels
-
 # Create silent tail
 if channels = 2
     Create Sound from formula: "silent_tail", 2, 0, tail_duration_seconds, sampling_rate, "0"
 else
     Create Sound from formula: "silent_tail", 1, 0, tail_duration_seconds, sampling_rate, "0"
 endif
-
 # Concatenate
 select Sound 'original_sound$'
 plus Sound silent_tail
 Concatenate
 Rename: "extended_sound"
-
 select Sound extended_sound
-
 if channels = 2
     Extract one channel: 1
     Rename: "left_channel"
@@ -118,7 +158,6 @@ else
     
     removeObject: "Sound soundObj"
 endif
-
 # Cleanup
 select Sound silent_tail
 plus Sound extended_sound
@@ -127,9 +166,7 @@ if channels = 2
     plus Sound right_channel
 endif
 Remove
-
 select Sound 'original_sound$'_granular
-
 if play_after_processing
     Play
 endif

@@ -21,6 +21,12 @@
 
 form Spectral Smearing Effect
     comment Apply frequency-dependent smearing reverb
+    optionmenu Preset 1
+        option Custom
+        option Subtle Smear
+        option Medium Smear
+        option Heavy Smear
+        option Extreme Smear
     positive Tail_duration_(seconds) 1.5
     positive Number_of_frequency_bands 20
     positive Time_stretch_factor 0.6
@@ -28,26 +34,53 @@ form Spectral Smearing Effect
     positive Fadeout_duration_(seconds) 1.2
 endform
 
+# Apply preset values if not Custom
+if preset = 2
+    # Subtle Smear
+    tail_duration = 1.0
+    number_of_frequency_bands = 12
+    time_stretch_factor = 0.4
+    base_amplitude = 0.2
+    fadeout_duration = 0.8
+elsif preset = 3
+    # Medium Smear
+    tail_duration = 1.5
+    number_of_frequency_bands = 20
+    time_stretch_factor = 0.6
+    base_amplitude = 0.35
+    fadeout_duration = 1.2
+elsif preset = 4
+    # Heavy Smear
+    tail_duration = 2.5
+    number_of_frequency_bands = 30
+    time_stretch_factor = 0.85
+    base_amplitude = 0.5
+    fadeout_duration = 1.8
+elsif preset = 5
+    # Extreme Smear
+    tail_duration = 4.0
+    number_of_frequency_bands = 45
+    time_stretch_factor = 1.2
+    base_amplitude = 0.65
+    fadeout_duration = 2.5
+endif
+
 original_sound$ = selected$("Sound")
 select Sound 'original_sound$'
 original_duration = Get total duration
 sampling_rate = Get sample rate
 channels = Get number of channels
-
 tail_duration = tail_duration
 if channels = 2
     Create Sound from formula: "silent_tail", 2, 0, tail_duration, sampling_rate, "0"
 else
     Create Sound from formula: "silent_tail", 1, 0, tail_duration, sampling_rate, "0"
 endif
-
 select Sound 'original_sound$'
 plus Sound silent_tail
 Concatenate
 Rename: "extended_sound"
-
 select Sound extended_sound
-
 if channels = 2
     Extract one channel: 1
     Rename: "left_channel"
@@ -121,15 +154,12 @@ else
     
     removeObject: "Sound reverb_copy"
 endif
-
 # Apply fadeout
 select Sound spectral_smearing_stereo
 total_duration = Get total duration
 fade_duration = fadeout_duration
 fade_start = total_duration - fade_duration
-
 Formula: "if x > 'fade_start' then self * (0.5 + 0.5 * cos(pi * (x - 'fade_start') / 'fade_duration')) else self fi"
-
 # Final cleanup
 select Sound silent_tail
 plus Sound extended_sound
@@ -138,6 +168,5 @@ if channels = 2
     plus Sound right_channel
 endif
 Remove
-
 select Sound spectral_smearing_stereo
 Play

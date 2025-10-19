@@ -21,6 +21,12 @@
 
 form Fractal Feedback Reverb
     comment This script creates complex reverb with chaotic delay patterns
+    optionmenu Preset 1
+        option Custom
+        option Subtle Fractal
+        option Medium Fractal
+        option Heavy Fractal
+        option Extreme Fractal
     positive tail_duration_seconds 2
     natural iterations 32
     positive seed_delay 0.08
@@ -32,31 +38,69 @@ form Fractal Feedback Reverb
     boolean play_after_processing 1
 endform
 
+# Apply preset values if not Custom
+if preset = 2
+    # Subtle Fractal
+    tail_duration_seconds = 1.5
+    iterations = 20
+    seed_delay = 0.06
+    chaos_factor = 1.5
+    memory_depth = 3
+    amplitude_base = 0.12
+    secondary_amplitude_factor = 0.65
+    modulation_frequency = 25
+elsif preset = 3
+    # Medium Fractal
+    tail_duration_seconds = 2
+    iterations = 32
+    seed_delay = 0.08
+    chaos_factor = 1.8
+    memory_depth = 4
+    amplitude_base = 0.18
+    secondary_amplitude_factor = 0.75
+    modulation_frequency = 30
+elsif preset = 4
+    # Heavy Fractal
+    tail_duration_seconds = 2.8
+    iterations = 48
+    seed_delay = 0.1
+    chaos_factor = 2.1
+    memory_depth = 5
+    amplitude_base = 0.24
+    secondary_amplitude_factor = 0.85
+    modulation_frequency = 38
+elsif preset = 5
+    # Extreme Fractal
+    tail_duration_seconds = 4.0
+    iterations = 70
+    seed_delay = 0.12
+    chaos_factor = 2.5
+    memory_depth = 6
+    amplitude_base = 0.3
+    secondary_amplitude_factor = 0.95
+    modulation_frequency = 45
+endif
+
 if not selected("Sound")
     exitScript: "Please select a Sound object first."
 endif
-
 original_sound$ = selected$("Sound")
 select Sound 'original_sound$'
 original_duration = Get total duration
 sampling_rate = Get sample rate
 channels = Get number of channels
-
 # Create silent tail
 if channels = 2
     Create Sound from formula: "silent_tail", 2, 0, tail_duration_seconds, sampling_rate, "0"
 else
     Create Sound from formula: "silent_tail", 1, 0, tail_duration_seconds, sampling_rate, "0"
 endif
-
 # Concatenate
 select Sound 'original_sound$'
 plus Sound silent_tail
 Concatenate
 Rename: "extended_sound"
-
 select Sound extended_sound
-
 if channels = 2
     Extract one channel: 1
     Rename: "left_channel"
@@ -115,7 +159,6 @@ else
     
     removeObject: "Sound reverb_copy"
 endif
-
 # Cleanup
 select Sound silent_tail
 plus Sound extended_sound
@@ -124,9 +167,7 @@ if channels = 2
     plus Sound right_channel
 endif
 Remove
-
 select Sound 'original_sound$'_fractal_reverb
-
 if play_after_processing
     Play
 endif

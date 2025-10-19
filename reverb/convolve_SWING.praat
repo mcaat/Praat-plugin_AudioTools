@@ -21,6 +21,12 @@
 
 form Tempo Grid with Swing Convolution
     comment This script creates swung rhythm impulse convolution
+    optionmenu Preset 1
+        option Custom
+        option Subtle Swing
+        option Medium Swing
+        option Heavy Swing
+        option Extreme Swing
     positive duration_seconds 2.0
     positive tempo_bpm 120
     positive swing_delay_seconds 0.06
@@ -34,26 +40,60 @@ form Tempo Grid with Swing Convolution
     boolean play_after_processing 1
 endform
 
+# Apply preset values if not Custom
+if preset = 2
+    # Subtle Swing
+    duration_seconds = 1.5
+    tempo_bpm = 110
+    swing_delay_seconds = 0.03
+    sampling_frequency = 44100
+    pulse_amplitude = 1
+    pulse_width = 0.015
+    pulse_period = 2200
+elsif preset = 3
+    # Medium Swing
+    duration_seconds = 2.0
+    tempo_bpm = 120
+    swing_delay_seconds = 0.06
+    sampling_frequency = 44100
+    pulse_amplitude = 1
+    pulse_width = 0.02
+    pulse_period = 2000
+elsif preset = 4
+    # Heavy Swing
+    duration_seconds = 2.5
+    tempo_bpm = 130
+    swing_delay_seconds = 0.09
+    sampling_frequency = 44100
+    pulse_amplitude = 1
+    pulse_width = 0.025
+    pulse_period = 1800
+elsif preset = 5
+    # Extreme Swing
+    duration_seconds = 3.5
+    tempo_bpm = 140
+    swing_delay_seconds = 0.12
+    sampling_frequency = 44100
+    pulse_amplitude = 1
+    pulse_width = 0.03
+    pulse_period = 1600
+endif
+
 if numberOfSelected("Sound") < 1
     exitScript: "Select a Sound in the Objects window first."
 endif
-
 selectObject: selected("Sound", 1)
 originalName$ = selected$("Sound")
 Copy: "XXXX"
 selectObject: "Sound XXXX"
 Resample: sampling_frequency, 50
-
 # Calculate beat duration
 beat = 60 / tempo_bpm
-
 # Create tempo grid with swing
 Create empty PointProcess: "pp_swing", 0, duration_seconds
 selectObject: "PointProcess pp_swing"
-
 t = beat
 i = 1
-
 while t < duration_seconds
     if (i mod 2) = 0
         Add point: t + swing_delay_seconds
@@ -63,26 +103,21 @@ while t < duration_seconds
     t = t + beat
     i = i + 1
 endwhile
-
 # Convert to pulse train
 To Sound (pulse train): sampling_frequency, pulse_amplitude, pulse_width, pulse_period
 Rename: "impulse_swing"
 Scale peak: 0.99
-
 # Convolve
 selectObject: "Sound XXXX"
 plusObject: "Sound impulse_swing"
 Convolve: "peak 0.99", "zero"
 Rename: originalName$ + "_swing"
-
 if play_after_processing
     Play
 endif
-
 # Cleanup
 selectObject: "Sound XXXX"
 plusObject: "PointProcess pp_swing"
 plusObject: "Sound impulse_swing"
 Remove
-
 selectObject: "Sound " + originalName$ + "_swing"

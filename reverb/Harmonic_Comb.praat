@@ -21,6 +21,12 @@
 
 form Harmonic Comb Filter
     comment This script applies harmonic series-based comb filtering
+    optionmenu Preset 1
+        option Custom
+        option Subtle Comb
+        option Medium Comb
+        option Heavy Comb
+        option Extreme Comb
     natural number_of_harmonics 7
     positive fundamental_delay_min 20
     positive fundamental_delay_max 100
@@ -29,25 +35,51 @@ form Harmonic Comb Filter
     boolean play_after_processing 1
 endform
 
+# Apply preset values if not Custom
+if preset = 2
+    # Subtle Comb
+    number_of_harmonics = 4
+    fundamental_delay_min = 30
+    fundamental_delay_max = 80
+    modulation_divisor = 1200
+    scale_peak = 0.99
+elsif preset = 3
+    # Medium Comb
+    number_of_harmonics = 7
+    fundamental_delay_min = 20
+    fundamental_delay_max = 100
+    modulation_divisor = 1000
+    scale_peak = 0.99
+elsif preset = 4
+    # Heavy Comb
+    number_of_harmonics = 11
+    fundamental_delay_min = 15
+    fundamental_delay_max = 120
+    modulation_divisor = 850
+    scale_peak = 0.98
+elsif preset = 5
+    # Extreme Comb
+    number_of_harmonics = 16
+    fundamental_delay_min = 10
+    fundamental_delay_max = 150
+    modulation_divisor = 700
+    scale_peak = 0.97
+endif
+
 if not selected("Sound")
     exitScript: "Please select a Sound object first."
 endif
-
 originalName$ = selected$("Sound")
 Copy: originalName$ + "_harmonic_comb"
-
 a = Get number of samples
 fundamental_delay = randomUniform(fundamental_delay_min, fundamental_delay_max)
-
 for harmonic from 1 to number_of_harmonics
     harmonic_delay = fundamental_delay / harmonic
     harmonic_weight = 1.0 / (harmonic * harmonic)
     phase_shift = randomUniform(0, 2*pi)
     Formula: "self + 'harmonic_weight' * (self[col+'harmonic_delay'] - self[col]) * cos('phase_shift' + 2*pi*col*'harmonic'/'modulation_divisor')"
 endfor
-
 Scale peak: scale_peak
-
 if play_after_processing
     Play
 endif
