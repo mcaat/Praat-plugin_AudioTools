@@ -529,6 +529,34 @@ for i from 1 to 10
 endfor
 appendInfoLine: ""
 appendInfoLine: "Processing complete!"
+# --- Cleanup: keep only original input (sound) and output (outS) ---
+procedure SafeRemove (id)
+    if id <> 0 and id <> sound and id <> outS
+        selectObject: id
+        Remove
+    endif
+endproc
+
+# Remove analysis & training artifacts
+call SafeRemove: pitch
+call SafeRemove: intensity
+call SafeRemove: formant
+call SafeRemove: mfcc
+call SafeRemove: harmonicity
+
+call SafeRemove: xtab       ; "features" TableOfReal
+call SafeRemove: ytab       ; "targets"  TableOfReal
+call SafeRemove: ymat       ; Matrix from ytab
+call SafeRemove: yal        ; ActivationList (targets)
+call SafeRemove: xmat       ; Matrix from xtab
+call SafeRemove: pat        ; Pattern from xmat
+call SafeRemove: ff         ; FFNet
+call SafeRemove: afinal     ; ActivationList (predictions)
+call SafeRemove: ypred      ; Matrix from afinal
+call SafeRemove: ctrl       ; "Ctrl" TableOfReal
+call SafeRemove: ctrlMat    ; Matrix from "Ctrl"
+# --- End cleanup ---
+
 
 if play_result <> 0
     selectObject: outS
