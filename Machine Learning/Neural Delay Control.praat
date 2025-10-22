@@ -1,3 +1,20 @@
+# ============================================================
+# Praat AudioTools - Neural Delay Control (FFNet with adaptive feedback)
+# Author: Shai Cohen
+# Affiliation: Department of Music, Bar-Ilan University, Israel
+# Email: shai.cohen@biu.ac.il
+# Version: 0.2 (2025)
+# License: MIT License
+# Repository: https://github.com/ShaiCohen-ops/Praat-plugin_AudioTools
+#
+# Description:
+#   Neural Delay Control (FFNet with adaptive feedback)
+
+# Citation:
+#   Cohen, S. (2025). Praat AudioTools: An Offline Analysis—Resynthesis Toolkit for Experimental Composition.
+#   https://github.com/ShaiCohen-ops/Praat-plugin_AudioTools
+# ============================================================
+
 form Neural Delay Control (FFNet with adaptive feedback)
     positive frame_step_seconds 0.02
     positive smooth_ms 40
