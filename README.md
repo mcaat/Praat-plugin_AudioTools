@@ -8,10 +8,10 @@
 
 ## Overview
 
-**Praat AudioTools** is a collection of more than one hundred scripts for **audio processing, analysis, and synthesis** in [Praat](http://www.praat.org).  
+**Praat AudioTools** is a collection of more than **250 scripts** for **audio processing, analysis, and synthesis** in [Praat](http://www.praat.org).  
 The plugin adds a unified **AudioTools** menu to Praat, offering a wide range of effects, filters, transformations, and creative analysis-driven tools for sound design and experimental composition.
 
-Developed for composers, sound designers, and researchers, the toolkit extends Praat’s phonetic analysis environment into a **complete offline sound laboratory** — enabling processes such as granular synthesis, adaptive filtering, spectral manipulation, fractal reverbs, and multichannel spatialisation.
+Developed for composers, sound designers, and researchers, the toolkit extends Praat's phonetic analysis environment into a **complete offline sound laboratory** — enabling processes such as granular synthesis, adaptive filtering, spectral manipulation, fractal reverbs, multichannel spatialisation, and machine learning-driven audio effects.
 
 ---
 
@@ -20,27 +20,33 @@ Developed for composers, sound designers, and researchers, the toolkit extends P
 1. **Download or clone** this repository.  
    ```bash
    git clone https://github.com/ShaiCohen-ops/Praat-plugin_AudioTools.git
+   ```
 
-2. Locate your Praat plugins folder.
-Depending on your operating system, Praat looks for plugins here:
+2. **Locate your Praat plugins folder.**  
+   Depending on your operating system, Praat looks for plugins here:
 
-Windows:   C:\Users\<YourName>\Praat\plugins\
+   - **Windows:**   `C:\Users\<YourName>\Praat\plugins\`
+   - **macOS:**     `~/Library/Preferences/Praat/plugins/`
+   - **Linux:**     `~/.praat-dir/plugins/`
 
-macOS:     ~/Library/Preferences/Praat/plugins/ 
+3. **Copy the folder** `plugin_AudioTools` into the plugins directory.
 
-Linux:     ~/.praat-dir/plugins/
+4. **Restart Praat.**
 
-
-Copy the folder plugin_AudioTools into the plugins directory.
-Restart Praat.
+---
 
 ## Scripts Documentation
 
-https://mashav.com/sha/praat/scripts/index.html
+**Interactive HTML documentation for all 254 scripts:**  
+[https://mashav.com/sha/praat/scripts/index.html](https://mashav.com/sha/praat/scripts/index.html)
+
+The documentation includes searchable guides with detailed parameter descriptions, usage examples, and technical explanations for each script.
+
+---
 
 ## Script Categories
 
-### <a id="analysis"></a> Analysis (29 Scripts)
+### <a id="analysis"></a> Analysis (28 Scripts)
 <details>
 <summary>Expand to view all scripts</summary>
 
@@ -52,13 +58,13 @@ https://mashav.com/sha/praat/scripts/index.html
 * `DTW for 2 files`
 * `duration_all_files`
 * `extract portion`
-* `Formant to MIDI Chord Converter`
-* `Formant to MusicXML Chord Converter`
 * `Extraction`
+* `Formant to MIDI Chord Converter`
 * `HarmonicityS_all_files`
 * `Intensity_all_files`
 * `Jitter (local)_new`
 * `jitter_all_files`
+* `Kick Detector and Bass Adder`
 * `Maximum pitch`
 * `maximum_pitch_all_files`
 * `mean_pitch_all_files`
@@ -68,7 +74,7 @@ https://mashav.com/sha/praat/scripts/index.html
 * `shimmer_local`
 * `Spectral Flatness and Roughness`
 * `spectral roll-off frequency`
-* `SpectraScore - Orchestration Matcher`
+* `SpectraScore`
 * `speech activity`
 * `Speech to MusicXML Rhythm Converter`
 * `SPR_all_files_new`
@@ -86,15 +92,14 @@ https://mashav.com/sha/praat/scripts/index.html
 * `Fractal_Convolution_Matrix`
 * `Harmonic_Resonance`
 * `Magnetic_Tape_Degradation`
-* `Particle Field Renderer`
 * `Particle Field Renderer audio`
 * `Phase_Modulation_Matrix`
 * `Quantum_State_Superposition`
-* `Segment_mixer`
-* `Stereo Mosaic`
 * `Sorts grains from dark to bright`
 * `Sound to Grain`
 * `Sound to Grain (Stereo with Independent Reversal)`
+* `Segment_mixer`
+* `Stereo Mosaic`
 * `Spectral_Echo_Cascade`
 * `Spectral_Freeze_&_Glitch`
 * `Stereo Delay Splitter`
@@ -176,7 +181,7 @@ https://mashav.com/sha/praat/scripts/index.html
 * `Wobbling frequency shift`
 </details>
 
-### <a id="filter"></a> Filter (29 Scripts)
+### <a id="filter"></a> Filter (28 Scripts)
 <details>
 <summary>Expand to view all scripts</summary>
 
@@ -197,13 +202,12 @@ https://mashav.com/sha/praat/scripts/index.html
 * `MFCC Temporal Manipulations`
 * `MFCC-based Sound Controller`
 * `Panning filter`
-* `Onset-Based Oscillator Bank`
 * `QUADRATIC PHASE MODULATION`
 * `Raised-cosine band boost`
 * `Resonant`
 * `SINUSOIDAL FREQUENCY MODULATION`
-* `SPIRAL FREQUENCY MODULATION`
 * `Spectral Filtering Effect`
+* `SPIRAL FREQUENCY MODULATION`
 * `Time varying Ring Modulation`
 * `Time-based jitter-shimmer to formant mapping`
 * `TREMBLING RING MOD`
@@ -211,7 +215,19 @@ https://mashav.com/sha/praat/scripts/index.html
 * `XMod`
 </details>
 
-### <a id="modulation"></a> Modulation (21 Scripts)
+### <a id="machine-learning"></a> Machine Learning (6 Scripts)
+<details>
+<summary>Expand to view all scripts</summary>
+
+* `Neural Delay Control`
+* `Neural Phonetic Harmonizer`
+* `Neural Phonetic Speed Mapper`
+* `Neural Phonetic Tremolo-Glitch`
+* `PCA Timbre Selector`
+* `PCA Tone Shaper`
+</details>
+
+### <a id="modulation"></a> Modulation (22 Scripts)
 <details>
 <summary>Expand to view all scripts</summary>
 
@@ -224,6 +240,7 @@ https://mashav.com/sha/praat/scripts/index.html
 * `Fractal_Convolution_Swarm`
 * `Golden-chaos_vibrato`
 * `Lengthen`
+* `Neural Phonetic Speed Mapper`
 * `Orbit_Chorus`
 * `rate_modulation`
 * `Rotary`
@@ -301,7 +318,7 @@ https://mashav.com/sha/praat/scripts/index.html
 * `Temporal_Warpping`
 </details>
 
-### <a id="spatial"></a> Spatial (18 Scripts)
+### <a id="spatial"></a> Spatial (16 Scripts)
 <details>
 <summary>Expand to view all scripts</summary>
 
@@ -311,7 +328,6 @@ https://mashav.com/sha/praat/scripts/index.html
 * `8-Channel Delay`
 * `8-Channel movments`
 * `8-channel speed deviations`
-* `8-Channel Speech-Driven Spatialization`
 * `Add signals`
 * `BPM_Panning`
 * `BPM_SURROUND _Panning`
@@ -377,13 +393,52 @@ https://mashav.com/sha/praat/scripts/index.html
 * `Waveguide & Modal Synthesis`
 </details>
 
+---
+
+## Key Features
+
+### Machine Learning Integration
+The toolkit now includes **6 neural network and PCA-based scripts** that leverage Praat's FFNet capabilities for intelligent audio processing:
+- **Adaptive effect control** using trained neural networks
+- **Phonetic classification** for context-aware processing
+- **PCA-driven timbre analysis and manipulation**
+- **Real-time parameter learning** from acoustic features
+
+### Creative Audio Processing
+- **Granular synthesis** with adaptive controls
+- **Spectral manipulation** and frequency-domain effects
+- **Multi-band dynamics** and compression
+- **Fractal and algorithmic reverbs**
+- **Multichannel spatialization** (up to 8 channels)
+
+### Analysis & Synthesis
+- **Feature extraction** (MFCC, spectral descriptors, formants)
+- **Algorithmic composition** tools (Markov chains, cellular automata, stochastic processes)
+- **Image sonification** for visual-to-audio mapping
+- **Cross-synthesis** and vocoding
+
+---
+
 ## Citation
 
 If you use this toolkit in academic work, please cite:
+
+```
 Cohen, S. (2025). Praat AudioTools: An Offline Analysis–Resynthesis Toolkit for Experimental Composition.
 GitHub Repository: https://github.com/ShaiCohen-ops/Praat-plugin_AudioTools
+```
+
+---
+
+## License
+
+MIT License
+
+---
 
 ## Acknowledgements
 
-Praat by Paul Boersma & David Weenink, University of Amsterdam.
-This plugin repurposes Praat’s scientific tools for creative sound design and electroacoustic composition.
+**Praat** by Paul Boersma & David Weenink, University of Amsterdam.  
+This plugin repurposes Praat's scientific tools for creative sound design and electroacoustic composition.
+
+Special thanks to the Praat community and the Department of Music at Bar-Ilan University for supporting this research.
