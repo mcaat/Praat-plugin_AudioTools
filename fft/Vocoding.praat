@@ -21,6 +21,13 @@
 
 form Noise Vocoder
     comment This script creates a noise vocoder effect
+    comment Presets:
+    optionmenu preset: 1
+        option Default
+        option More Bands
+        option Wider Frequency Range
+        option Stronger Noise
+        option Smoother Filter
     comment Vocoder band parameters:
     natural number_of_bands 16
     positive lower_frequency_limit 50
@@ -38,6 +45,18 @@ form Noise Vocoder
     boolean play_after_processing 1
     boolean keep_intermediate_objects 0
 endform
+
+# Apply preset values
+if preset = 2 ; More Bands
+    number_of_bands = 24
+elif preset = 3 ; Wider Frequency Range
+    lower_frequency_limit = 20
+    upper_frequency_limit = 15000
+elif preset = 4 ; Stronger Noise
+    noise_amplitude = 0.2
+elif preset = 5 ; Smoother Filter
+    filter_smoothing = 100
+endif
 
 # Check if a Sound is selected
 if not selected("Sound")
@@ -122,6 +141,7 @@ endfor
 # Select final result
 select Sound band'number_of_bands'
 Rename: s1$ + "_vocoded"
+final_result = selected("Sound")
 
 # Play if requested
 if play_after_processing
@@ -132,3 +152,6 @@ endif
 if not keep_intermediate_objects
     # The final sound is already renamed, so intermediate bands are removed
 endif
+
+# Select both original and result
+selectObject: s1, final_result

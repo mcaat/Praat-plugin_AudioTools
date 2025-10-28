@@ -1,5 +1,5 @@
 # ============================================================
-# Praat AudioTools - Basic Mirror.praat
+# Praat AudioTools - Basic Mirror.praat  (fixed to keep output selected)
 # Author: Shai Cohen
 # Affiliation: Department of Music, Bar-Ilan University, Israel
 # Email: shai.cohen@biu.ac.il
@@ -26,6 +26,11 @@ form Spectral Mirroring
     comment Spectrum parameters:
     boolean fast_fourier yes
     comment Mirroring parameters:
+    optionmenu Preset: 1
+        option Mild mirroring (cutoff = nyquist/4)
+        option Moderate mirroring (cutoff = nyquist/2)
+        option Strong mirroring (cutoff = nyquist/8)
+        option Custom cutoff
     positive cutoff_divisor 2
     comment (2 = mirror below nyquist/2, 4 = mirror below nyquist/4)
     comment Output options:
@@ -34,45 +39,59 @@ form Spectral Mirroring
     boolean keep_intermediate_objects 0
 endform
 
-# Check if a Sound is selected
-if not selected("Sound")
-    exitScript: "Please select a Sound object first."
+# Apply preset values
+if preset = 1
+    cutoff_divisor = 4
+elsif preset = 2
+    cutoff_divisor = 2
+elsif preset = 3
+    cutoff_divisor = 8
+endif
+# If preset = 4 (Custom), use the user-entered cutoff_divisor value
+
+# --- Preconditions: need a selected Sound ---
+if numberOfSelected ("Sound") <> 1
+    exit ("Please select exactly ONE Sound object first.")
 endif
 
-# Get the original sound name
-originalName$ = selected$("Sound")
+# Remember original Sound name (for output naming)
+originalName$ = selected$ ("Sound")
 
-# Get sampling frequency
+# Get sampling frequency while Sound is selected
 sampling_rate = Get sampling frequency
-
-# Convert to spectrum
-spectrum = To Spectrum: fast_fourier
-
-# Calculate Nyquist frequency
 nyquist = sampling_rate / 2
 
-# Calculate cutoff frequency
+# Convert to Spectrum (store its object ID so we can clean up safely)
+spectrumID = To Spectrum: fast_fourier
+
+# Compute cutoff frequency (in Hz)
 cutoff = nyquist / cutoff_divisor
 
-# Apply spectral mirroring formula
+# Apply spectral mirroring formula (operates on the selected Spectrum)
+# NOTE: This uses the user's original formula as provided.
 Formula: "if col < cutoff then self[1,col] + self[1,nyquist-col] else self[1,col] fi"
 
-# Convert back to sound
-result = To Sound
+# Convert back to Sound; remember the new Sound's ID so we can reselect it later
+To Sound
+resultID = selected ("Sound")
 
-# Rename result
-Rename: originalName$ + "_spectral_mirrored"
+# Rename the result
+outName$ = originalName$ + "_spectral_mirrored"
+Rename: outName$
 
 # Scale to peak
 Scale peak: scale_peak
 
-# Play if requested
+# Optionally play
 if play_after_processing
     Play
 endif
 
-# Clean up intermediate objects unless requested to keep
+# Clean up intermediate Spectrum unless requested otherwise
 if not keep_intermediate_objects
-    select spectrum
+    selectObject: spectrumID
     Remove
 endif
+
+# --- Ensure the output Sound is selected when we finish ---
+selectObject: resultID

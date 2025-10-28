@@ -23,6 +23,13 @@ form Harmonic Mirror - Mirror at Harmonic Intervals
     comment This script mirrors frequencies at harmonic intervals
     comment WARNING: This process can have long runtime on long files
     comment due to FFT calculations
+    comment Presets:
+    optionmenu preset: 1
+        option Default
+        option Strong Mirror
+        option Subtle Mirror
+        option Wide Harmonic Bandwidth
+        option Low Fundamental
     comment Spectrum parameters:
     boolean fast_fourier yes
     comment Harmonic mirror parameters:
@@ -40,6 +47,17 @@ form Harmonic Mirror - Mirror at Harmonic Intervals
     boolean play_after_processing 1
     boolean keep_intermediate_objects 0
 endform
+
+# Apply preset values
+if preset = 2 ; Strong Mirror
+    mirror_multiplier = 1.8
+elif preset = 3 ; Subtle Mirror
+    mirror_multiplier = 0.8
+elif preset = 4 ; Wide Harmonic Bandwidth
+    harmonic_bandwidth = 100
+elif preset = 5 ; Low Fundamental
+    fundamental_frequency = 110
+endif
 
 # Check if a Sound is selected
 if not selected("Sound")
@@ -77,6 +95,6 @@ endif
 
 # Clean up intermediate objects unless requested to keep
 if not keep_intermediate_objects
-    select spectrum
+    selectObject: spectrum
     Remove
 endif

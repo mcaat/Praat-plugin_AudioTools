@@ -23,6 +23,13 @@ form Spectral Cellular Automata
     comment This script applies rule-based evolution pattern to spectrum
     comment WARNING: This process can have long runtime on long files
     comment due to FFT calculations
+    comment Presets:
+    optionmenu preset: 1
+        option Default
+        option Tight Pattern
+        option Loose Pattern
+        option Strong Active Boost
+        option Subtle Inactive Attenuation
     comment Spectrum parameters:
     boolean fast_fourier yes
     comment Cellular automata rule parameters:
@@ -40,6 +47,19 @@ form Spectral Cellular Automata
     boolean play_after_processing 1
     boolean keep_intermediate_objects 0
 endform
+
+# Apply preset values
+if preset = 2 ; Tight Pattern
+    rule_divisor_1 = 50
+    rule_divisor_2 = 75
+elif preset = 3 ; Loose Pattern
+    rule_divisor_1 = 200
+    rule_divisor_2 = 300
+elif preset = 4 ; Strong Active Boost
+    active_multiplier = 2.5
+elif preset = 5 ; Subtle Inactive Attenuation
+    inactive_multiplier = 0.5
+endif
 
 # Check if a Sound is selected
 if not selected("Sound")
@@ -75,6 +95,6 @@ endif
 
 # Clean up intermediate objects unless requested to keep
 if not keep_intermediate_objects
-    select spectrum
+    selectObject: spectrum
     Remove
 endif

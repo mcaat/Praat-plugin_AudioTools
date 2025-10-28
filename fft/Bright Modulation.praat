@@ -23,6 +23,13 @@ form Bright Modulation
     comment This script applies sinusoidal modulation to lower frequencies
     comment WARNING: This process can have long runtime on long files
     comment due to FFT calculations
+    comment Presets:
+    optionmenu preset: 1
+        option Default
+        option Deep Modulation
+        option Shallow Modulation
+        option Fast Modulation
+        option Slow Modulation
     comment Spectrum parameters:
     boolean fast_fourier yes
     comment Modulation parameters:
@@ -37,6 +44,17 @@ form Bright Modulation
     boolean play_after_processing 1
     boolean keep_intermediate_objects 0
 endform
+
+# Apply preset values
+if preset = 2 ; Deep Modulation
+    modulation_depth = 0.8
+elif preset = 3 ; Shallow Modulation
+    modulation_depth = 0.2
+elif preset = 4 ; Fast Modulation
+    modulation_frequency_divisor = 500
+elif preset = 5 ; Slow Modulation
+    modulation_frequency_divisor = 2000
+endif
 
 # Check if a Sound is selected
 if not selected("Sound")
@@ -53,7 +71,7 @@ sampling_rate = Get sampling frequency
 spectrum = To Spectrum: fast_fourier
 
 # Apply bright modulation (sinusoidal modulation to lower frequencies)
-Formula: "if col < 'cutoff_frequency' then self[1,col] * 'modulation_center' * (1 + sin(col / 'modulation_frequency_divisor')) else self[1,col] fi"
+Formula: "if col < 'cutoff_frequency' then self[1,col] * 'modulation_center' * (1 + 'modulation_depth' * sin(col / 'modulation_frequency_divisor')) else self[1,col] fi"
 
 # Convert back to sound
 result = To Sound
@@ -71,6 +89,6 @@ endif
 
 # Clean up intermediate objects unless requested to keep
 if not keep_intermediate_objects
-    select spectrum
+    selectObject: spectrum
     Remove
 endif

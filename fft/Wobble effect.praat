@@ -21,6 +21,13 @@
 
 form Wobble Effect with Tremolo
     comment This script applies frequency modulation wobble and tremolo decay
+    comment Presets:
+    optionmenu preset: 1
+        option Default
+        option Deep Wobble
+        option Subtle Wobble
+        option Fast Tremolo
+        option Strong Decay
     comment Frequency wobble parameters:
     positive base_shift 1.1
     positive wobble_depth 0.3
@@ -39,13 +46,25 @@ form Wobble Effect with Tremolo
     boolean play_after_processing 1
 endform
 
+# Apply preset values
+if preset = 2 ; Deep Wobble
+    wobble_depth = 0.5
+elif preset = 3 ; Subtle Wobble
+    wobble_depth = 0.1
+elif preset = 4 ; Fast Tremolo
+    tremolo_frequency = 40
+elif preset = 5 ; Strong Decay
+    decay_base = 20
+    tremolo_depth = 0.7
+endif
+
 # Check if a Sound is selected
 if not selected("Sound")
     exitScript: "Please select a Sound object first."
 endif
 
 # Copy the sound object
-Copy... soundObj
+Copy: "soundObj"
 
 # Get name and ID
 name$ = selected$("Sound")

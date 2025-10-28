@@ -23,6 +23,13 @@ form Harmonic Resonance Boost
     comment This script boosts harmonic frequencies and attenuates others
     comment WARNING: This process can have long runtime on long files
     comment due to FFT calculations
+    comment Presets:
+    optionmenu preset: 1
+        option Default
+        option Strong Harmonic Boost
+        option Subtle Harmonic Boost
+        option Wide Harmonic Bandwidth
+        option Deep Attenuation
     comment Spectrum parameters:
     boolean fast_fourier yes
     comment Harmonic boost parameters:
@@ -44,6 +51,18 @@ form Harmonic Resonance Boost
     boolean play_after_processing 1
     boolean keep_intermediate_objects 0
 endform
+
+# Apply preset values
+if preset = 2 ; Strong Harmonic Boost
+    harmonic_boost = 2.5
+elif preset = 3 ; Subtle Harmonic Boost
+    harmonic_boost = 1.2
+elif preset = 4 ; Wide Harmonic Bandwidth
+    harmonic_bandwidth = 100
+elif preset = 5 ; Deep Attenuation
+    low_mid_attenuation = 0.4
+    high_freq_attenuation = 0.2
+endif
 
 # Check if a Sound is selected
 if not selected("Sound")
@@ -78,6 +97,6 @@ endif
 
 # Clean up intermediate objects unless requested to keep
 if not keep_intermediate_objects
-    select spectrum
+    selectObject: spectrum
     Remove
 endif

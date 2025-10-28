@@ -23,6 +23,13 @@ form Rhythmic Pulsing Spectral Effect
     comment This script applies rhythmic pulsing with high-frequency rolloff
     comment WARNING: This process can have long runtime on long files
     comment due to FFT calculations
+    comment Presets:
+    optionmenu preset: 1
+        option Default
+        option Deep Pulsing
+        option Subtle Pulsing
+        option Frequent Pulses
+        option Steep Rolloff
     comment Spectrum parameters:
     boolean fast_fourier yes
     comment Pulsing parameters:
@@ -40,6 +47,17 @@ form Rhythmic Pulsing Spectral Effect
     boolean play_after_processing 1
     boolean keep_intermediate_objects 0
 endform
+
+# Apply preset values
+if preset = 2 ; Deep Pulsing
+    pulse_depth = 0.8
+elif preset = 3 ; Subtle Pulsing
+    pulse_depth = 0.2
+elif preset = 4 ; Frequent Pulses
+    pulse_frequency_divisor = 200
+elif preset = 5 ; Steep Rolloff
+    rolloff_exponent = 4
+endif
 
 # Check if a Sound is selected
 if not selected("Sound")
@@ -74,6 +92,6 @@ endif
 
 # Clean up intermediate objects unless requested to keep
 if not keep_intermediate_objects
-    select spectrum
+    selectObject: spectrum
     Remove
 endif

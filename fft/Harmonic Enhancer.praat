@@ -23,6 +23,13 @@ form Harmonic Enhancer
     comment This script adds harmonic overtones to enhance brightness
     comment WARNING: This process can have long runtime on long files
     comment due to FFT calculations
+    comment Presets:
+    optionmenu preset: 1
+        option Default
+        option Strong Harmonics
+        option Subtle Harmonics
+        option Second Harmonic Focus
+        option Third Harmonic Focus
     comment Spectrum parameters:
     boolean fast_fourier yes
     comment Harmonic enhancement parameters:
@@ -35,6 +42,21 @@ form Harmonic Enhancer
     boolean play_after_processing 1
     boolean keep_intermediate_objects 0
 endform
+
+# Apply preset values
+if preset = 2 ; Strong Harmonics
+    second_harmonic_weight = 0.5
+    third_harmonic_weight = 0.2
+elif preset = 3 ; Subtle Harmonics
+    second_harmonic_weight = 0.1
+    third_harmonic_weight = 0.05
+elif preset = 4 ; Second Harmonic Focus
+    second_harmonic_weight = 0.4
+    third_harmonic_weight = 0.05
+elif preset = 5 ; Third Harmonic Focus
+    second_harmonic_weight = 0.2
+    third_harmonic_weight = 0.3
+endif
 
 # Check if a Sound is selected
 if not selected("Sound")
@@ -70,6 +92,6 @@ endif
 
 # Clean up intermediate objects unless requested to keep
 if not keep_intermediate_objects
-    select spectrum
+    selectObject: spectrum
     Remove
 endif

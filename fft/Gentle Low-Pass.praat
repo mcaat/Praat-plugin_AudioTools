@@ -23,6 +23,13 @@ form Exponential Low-Pass Filter
     comment This script applies exponential roll-off to lower frequencies
     comment WARNING: This process can have long runtime on long files
     comment due to FFT calculations
+    comment Presets:
+    optionmenu preset: 1
+        option Default
+        option Steep Roll-off
+        option Gentle Roll-off
+        option High Cutoff
+        option Low Cutoff
     comment Spectrum parameters:
     boolean fast_fourier yes
     comment Filter parameters:
@@ -35,6 +42,17 @@ form Exponential Low-Pass Filter
     boolean play_after_processing 1
     boolean keep_intermediate_objects 0
 endform
+
+# Apply preset values
+if preset = 2 ; Steep Roll-off
+    decay_rate = 2000
+elif preset = 3 ; Gentle Roll-off
+    decay_rate = 8000
+elif preset = 4 ; High Cutoff
+    frequency_cutoff = 15000
+elif preset = 5 ; Low Cutoff
+    frequency_cutoff = 5000
+endif
 
 # Check if a Sound is selected
 if not selected("Sound")
@@ -71,6 +89,6 @@ endif
 
 # Clean up intermediate objects unless requested to keep
 if not keep_intermediate_objects
-    select spectrum
+    selectObject: spectrum
     Remove
 endif

@@ -21,6 +21,13 @@
 
 form Doppler Shift Effect
     comment This script simulates accelerating frequency change (Doppler effect)
+    comment Presets:
+    optionmenu preset: 1
+        option Default
+        option Strong Doppler
+        option Subtle Doppler
+        option Fast Acceleration
+        option Heavy Decay
     comment Doppler shift parameters:
     positive base_shift 1.0
     positive shift_amount 0.5
@@ -34,13 +41,24 @@ form Doppler Shift Effect
     boolean play_after_processing 1
 endform
 
+# Apply preset values
+if preset = 2 ; Strong Doppler
+    shift_amount = 1.0
+elif preset = 3 ; Subtle Doppler
+    shift_amount = 0.2
+elif preset = 4 ; Fast Acceleration
+    acceleration_exponent = 4
+elif preset = 5 ; Heavy Decay
+    decay_base = 25
+endif
+
 # Check if a Sound is selected
 if not selected("Sound")
     exitScript: "Please select a Sound object first."
 endif
 
 # Copy the sound object
-Copy... soundObj
+Copy: "soundObj"
 
 # Get name and ID
 name$ = selected$("Sound")

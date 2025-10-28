@@ -21,6 +21,13 @@
 
 form Underwater Muffled Effect
     comment This script simulates underwater/muffled sound with bubbling
+    comment Presets:
+    optionmenu preset: 1
+        option Default
+        option Deep Muffle
+        option Subtle Muffle
+        option Strong Bubbling
+        option Heavy Fade
     comment Low-pass simulation parameters:
     positive averaging_factor_1 1.05
     positive averaging_factor_2 1.08
@@ -37,13 +44,30 @@ form Underwater Muffled Effect
     boolean play_after_processing 1
 endform
 
+# Apply preset values
+if preset = 2 ; Deep Muffle
+    averaging_factor_1 = 1.1
+    averaging_factor_2 = 1.15
+    averaging_factor_3 = 1.2
+    high_freq_removal_factor = 1.5
+elif preset = 3 ; Subtle Muffle
+    averaging_factor_1 = 1.02
+    averaging_factor_2 = 1.04
+    averaging_factor_3 = 1.06
+    high_freq_removal_factor = 1.1
+elif preset = 4 ; Strong Bubbling
+    bubble_amount = 0.5
+elif preset = 5 ; Heavy Fade
+    fade_base = 20
+endif
+
 # Check if a Sound is selected
 if not selected("Sound")
     exitScript: "Please select a Sound object first."
 endif
 
 # Copy the sound object
-Copy... soundObj
+Copy: "soundObj"
 
 # Get name and ID
 name$ = selected$("Sound")

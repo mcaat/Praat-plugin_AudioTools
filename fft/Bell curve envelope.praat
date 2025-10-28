@@ -21,6 +21,13 @@
 
 form Bell Curve Envelope
     comment This script applies spectral filtering and Gaussian envelope
+    comment Presets:
+    optionmenu preset: 1
+        option Default
+        option Narrow Bell
+        option Wide Bell
+        option Low Freq Emphasis
+        option High Freq Emphasis
     comment Spectral filtering parameters:
     positive low_freq_factor 1.1
     positive high_freq_factor 1.1
@@ -34,13 +41,26 @@ form Bell Curve Envelope
     boolean play_after_processing 1
 endform
 
+# Apply preset values
+if preset = 2 ; Narrow Bell
+    bell_width_divisor = 6
+elif preset = 3 ; Wide Bell
+    bell_width_divisor = 2
+elif preset = 4 ; Low Freq Emphasis
+    low_freq_factor = 1.5
+    high_freq_factor = 1.0
+elif preset = 5 ; High Freq Emphasis
+    low_freq_factor = 1.0
+    high_freq_factor = 1.5
+endif
+
 # Check if a Sound is selected
 if not selected("Sound")
     exitScript: "Please select a Sound object first."
 endif
 
 # Copy the sound object
-Copy... soundObj
+Copy: "soundObj"
 
 # Get name and ID
 name$ = selected$("Sound")

@@ -23,6 +23,13 @@ form Wave Interference Pattern
     comment This script applies wave interference patterns to the spectrum
     comment WARNING: This process can have long runtime on long files
     comment due to FFT calculations
+    comment Presets:
+    optionmenu preset: 1
+        option Default
+        option Strong Interference
+        option Subtle Interference
+        option High Cutoff
+        option Heavy High-Freq Attenuation
     comment Spectrum parameters:
     boolean fast_fourier yes
     comment Interference pattern parameters:
@@ -40,6 +47,17 @@ form Wave Interference Pattern
     boolean play_after_processing 1
     boolean keep_intermediate_objects 0
 endform
+
+# Apply preset values
+if preset = 2 ; Strong Interference
+    cosine_weight = 0.8
+elif preset = 3 ; Subtle Interference
+    cosine_weight = 0.2
+elif preset = 4 ; High Cutoff
+    frequency_cutoff = 15000
+elif preset = 5 ; Heavy High-Freq Attenuation
+    high_freq_multiplier = 0.1
+endif
 
 # Check if a Sound is selected
 if not selected("Sound")
@@ -74,6 +92,6 @@ endif
 
 # Clean up intermediate objects unless requested to keep
 if not keep_intermediate_objects
-    select spectrum
+    selectObject: spectrum
     Remove
 endif

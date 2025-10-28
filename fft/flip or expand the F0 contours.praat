@@ -21,6 +21,13 @@
 
 form F0 Contour Manipulation
     comment This script manipulates F0 contours using PSOLA
+    comment Presets:
+    optionmenu preset: 1
+        option Default
+        option Wide Pitch Range
+        option Strong Expansion
+        option Subtle Flattening
+        option High Flatten Target
     comment Pitch analysis range:
     positive minimum_pitch 70
     positive maximum_pitch 250
@@ -40,6 +47,18 @@ form F0 Contour Manipulation
     boolean play_after_processing 1
     boolean keep_intermediate_objects 0
 endform
+
+# Apply preset values
+if preset = 2 ; Wide Pitch Range
+    minimum_pitch = 50
+    maximum_pitch = 400
+elif preset = 3 ; Strong Expansion
+    expansion_multiplier = 2.0
+elif preset = 4 ; Subtle Flattening
+    flatten_target = 0
+elif preset = 5 ; High Flatten Target
+    flatten_target = 200
+endif
 
 # Check if a Sound is selected
 if not selected("Sound")

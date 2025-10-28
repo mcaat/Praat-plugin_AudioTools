@@ -23,6 +23,13 @@ form Dynamic Tremolo Effect
     comment This script applies frequency-dependent tremolo modulation
     comment WARNING: This process can have long runtime on long files
     comment due to FFT calculations
+    comment Presets:
+    optionmenu preset: 1
+        option Default
+        option Deep Tremolo
+        option Subtle Tremolo
+        option Fast Tremolo
+        option Strong High-Freq Attenuation
     comment Spectrum parameters:
     boolean fast_fourier yes
     comment Tremolo modulation parameters:
@@ -41,6 +48,19 @@ form Dynamic Tremolo Effect
     boolean play_after_processing 1
     boolean keep_intermediate_objects 0
 endform
+
+# Apply preset values
+if preset = 2 ; Deep Tremolo
+    tremolo_minimum = 0.2
+    tremolo_maximum = 0.9
+elif preset = 3 ; Subtle Tremolo
+    tremolo_minimum = 0.4
+    tremolo_maximum = 0.4
+elif preset = 4 ; Fast Tremolo
+    tremolo_frequency_divisor = 200
+elif preset = 5 ; Strong High-Freq Attenuation
+    high_freq_attenuation = 0.5
+endif
 
 # Check if a Sound is selected
 if not selected("Sound")
@@ -75,6 +95,6 @@ endif
 
 # Clean up intermediate objects unless requested to keep
 if not keep_intermediate_objects
-    select spectrum
+    selectObject: spectrum
     Remove
 endif

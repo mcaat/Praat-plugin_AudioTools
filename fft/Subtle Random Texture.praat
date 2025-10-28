@@ -23,6 +23,13 @@ form Random Spectral Variation
     comment This script adds random variations to the frequency spectrum
     comment WARNING: This process can have long runtime on long files
     comment due to FFT calculations
+    comment Presets:
+    optionmenu preset: 1
+        option Default
+        option Strong Variation
+        option Subtle Variation
+        option High Cutoff
+        option Narrow Variation Range
     comment Spectrum parameters:
     boolean fast_fourier yes
     comment Random variation parameters:
@@ -38,6 +45,18 @@ form Random Spectral Variation
     boolean play_after_processing 1
     boolean keep_intermediate_objects 0
 endform
+
+# Apply preset values
+if preset = 2 ; Strong Variation
+    variation_depth = 0.4
+elif preset = 3 ; Subtle Variation
+    variation_depth = 0.1
+elif preset = 4 ; High Cutoff
+    frequency_cutoff = 15000
+elif preset = 5 ; Narrow Variation Range
+    variation_min = 0.7
+    variation_max = 0.9
+endif
 
 # Check if a Sound is selected
 if not selected("Sound")
@@ -72,6 +91,6 @@ endif
 
 # Clean up intermediate objects unless requested to keep
 if not keep_intermediate_objects
-    select spectrum
+    selectObject: spectrum
     Remove
 endif

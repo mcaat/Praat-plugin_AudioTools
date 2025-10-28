@@ -21,6 +21,13 @@
 
 form Wobbling Frequency Shift with Turbulent Decay
     comment This script applies wobbling frequency shifts and turbulent decay
+    comment Presets:
+    optionmenu preset: 1
+        option Default
+        option Strong Wobble
+        option Subtle Wobble
+        option Rapid Wobble
+        option Heavy Decay
     comment Frequency shift wobble parameters:
     positive base_shift 1.1
     positive wobble_amount 0.05
@@ -37,13 +44,25 @@ form Wobbling Frequency Shift with Turbulent Decay
     boolean play_after_processing 1
 endform
 
+# Apply preset values
+if preset = 2 ; Strong Wobble
+    wobble_amount = 0.1
+elif preset = 3 ; Subtle Wobble
+    wobble_amount = 0.02
+elif preset = 4 ; Rapid Wobble
+    wobble_frequency = 100
+elif preset = 5 ; Heavy Decay
+    decay_base = 40
+    turbulence_amount = 0.2
+endif
+
 # Check if a Sound is selected
 if not selected("Sound")
     exitScript: "Please select a Sound object first."
 endif
 
 # Copy the sound object
-Copy... soundObj
+Copy: "soundObj"
 
 # Get name and ID
 name$ = selected$("Sound")

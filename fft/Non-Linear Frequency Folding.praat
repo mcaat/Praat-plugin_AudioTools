@@ -23,6 +23,13 @@ form Spectral Knots - Non-Linear Frequency Folding
     comment This script applies non-linear frequency folding with modulation
     comment WARNING: This process can have long runtime on long files
     comment due to FFT calculations
+    comment Presets:
+    optionmenu preset: 1
+        option Default
+        option Tight Knots
+        option Loose Knots
+        option High Preservation
+        option Fast Modulation
     comment Spectrum parameters:
     boolean fast_fourier yes
     comment Low frequency preservation:
@@ -40,6 +47,18 @@ form Spectral Knots - Non-Linear Frequency Folding
     boolean play_after_processing 1
     boolean keep_intermediate_objects 0
 endform
+
+# Apply preset values
+if preset = 2 ; Tight Knots
+    folding_period = 500
+elif preset = 3 ; Loose Knots
+    folding_period = 2000
+elif preset = 4 ; High Preservation
+    low_freq_threshold = 500
+elif preset = 5 ; Fast Modulation
+    sine_modulation_divisor = 150
+    cosine_modulation_divisor = 75
+endif
 
 # Check if a Sound is selected
 if not selected("Sound")
@@ -75,6 +94,6 @@ endif
 
 # Clean up intermediate objects unless requested to keep
 if not keep_intermediate_objects
-    select spectrum
+    selectObject: spectrum
     Remove
 endif

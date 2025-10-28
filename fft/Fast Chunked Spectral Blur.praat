@@ -21,9 +21,27 @@
 
 # Fast Chunked Spectral Blur Script
 form Spectral Blur
+    comment Presets:
+    optionmenu preset: 1
+        option Default
+        option Strong Blur
+        option Subtle Blur
+        option Large Chunks
+        option Small Chunks
     positive blur_radius 3.0
     positive chunk_size_seconds 2.0
 endform
+
+# Apply preset values
+if preset = 2 ; Strong Blur
+    blur_radius = 5.0
+elif preset = 3 ; Subtle Blur
+    blur_radius = 1.5
+elif preset = 4 ; Large Chunks
+    chunk_size_seconds = 4.0
+elif preset = 5 ; Small Chunks
+    chunk_size_seconds = 1.0
+endif
 
 if numberOfSelected("Sound") <> 1
     exitScript: "Please select one Sound"
@@ -214,3 +232,4 @@ procedure processSpectralBlur: .sound, .blur_radius
         Remove
     endif
 endproc
+Play
