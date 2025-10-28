@@ -139,5 +139,6 @@ appendInfo: "Class 4 (silence - attenuate): ", class4_count, newline$
 # ===== NORMALIZE OUTPUT =====
 selectObject: output_sound
 Scale peak: 0.99
+Play
 
 selectObject: output_sound
