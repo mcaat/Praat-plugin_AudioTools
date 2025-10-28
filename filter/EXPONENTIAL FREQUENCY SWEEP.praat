@@ -21,6 +21,11 @@
 
 form Exponential Ring Modulation
     comment This script applies ring modulation with exponential frequency sweep
+    optionmenu Preset: 1
+        option Default
+        option Slow Sweep
+        option Fast Sweep
+        option Narrow Range
     comment Frequency sweep parameters:
     positive start_frequency 50
     comment (starting frequency in Hz)
@@ -30,6 +35,18 @@ form Exponential Ring Modulation
     positive scale_peak 0.99
     boolean play_after_processing 1
 endform
+
+# Apply preset values
+if preset$ = "Slow Sweep"
+    start_frequency = 100
+    end_frequency = 600
+elif preset$ = "Fast Sweep"
+    start_frequency = 50
+    end_frequency = 1200
+elif preset$ = "Narrow Range"
+    start_frequency = 200
+    end_frequency = 400
+endif
 
 # Check if a Sound is selected
 if not selected("Sound")

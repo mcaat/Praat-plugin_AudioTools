@@ -118,7 +118,8 @@ for current_sound from 1 to number_of_selected_sounds
     select combined
     finalSound = Convert to mono
     Rename: "formant_mod_" + originalName$ + "_j" + fixed$(jitter, 1) + "_s" + fixed$(shimmer, 1)
-    
+    Scale peak: 0.99
+
     # Play original and modified
     appendInfoLine: "  Playing original then modified..."
     select finalSound

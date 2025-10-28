@@ -21,6 +21,11 @@
 
 form Amplitude Varying Ring Modulation
     comment This script applies ring modulation with varying amplitude
+    optionmenu Preset: 1
+        option Default
+        option Subtle Modulation
+        option Extreme Sweep
+        option Fast Pulsing
     comment Ring modulation parameters:
     positive carrier_frequency 250
     comment (base frequency for ring modulation in Hz)
@@ -37,6 +42,27 @@ form Amplitude Varying Ring Modulation
     positive scale_peak 0.99
     boolean play_after_processing 1
 endform
+
+# Apply preset values
+if preset$ = "Subtle Modulation"
+    carrier_frequency = 100
+    sweep_exponent = 1.5
+    amplitude_rate = 1
+    amplitude_center = 0.7
+    amplitude_depth = 0.3
+elif preset$ = "Extreme Sweep"
+    carrier_frequency = 500
+    sweep_exponent = 3
+    amplitude_rate = 5
+    amplitude_center = 0.5
+    amplitude_depth = 0.5
+elif preset$ = "Fast Pulsing"
+    carrier_frequency = 200
+    sweep_exponent = 2
+    amplitude_rate = 10
+    amplitude_center = 0.6
+    amplitude_depth = 0.4
+endif
 
 # Check if a Sound is selected
 if not selected("Sound")

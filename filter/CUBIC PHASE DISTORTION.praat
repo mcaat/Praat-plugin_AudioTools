@@ -21,6 +21,11 @@
 
 form Cubic Phase Distortion
     comment This script applies ring modulation with cubic phase distortion
+    optionmenu Preset: 1
+        option Default
+        option Mild Distortion
+        option Strong Distortion
+        option High Frequency
     comment Ring modulation parameters:
     positive carrier_frequency 180
     comment (base frequency for ring modulation in Hz)
@@ -32,6 +37,18 @@ form Cubic Phase Distortion
     positive scale_peak 0.99
     boolean play_after_processing 1
 endform
+
+# Apply preset values
+if preset$ = "Mild Distortion"
+    carrier_frequency = 100
+    cubic_factor = 1
+elif preset$ = "Strong Distortion"
+    carrier_frequency = 200
+    cubic_factor = 4
+elif preset$ = "High Frequency"
+    carrier_frequency = 300
+    cubic_factor = 2.5
+endif
 
 # Check if a Sound is selected
 if not selected("Sound")

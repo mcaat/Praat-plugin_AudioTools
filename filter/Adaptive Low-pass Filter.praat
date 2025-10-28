@@ -21,6 +21,11 @@
 
 form Adaptive Low-Pass Filter
     comment This script applies a sweeping low-pass filter effect
+    optionmenu Preset: 1
+        option Default
+        option Gentle Sweep
+        option Sharp Transition
+        option Narrow Band
     comment Filter sweep parameters:
     positive start_cutoff_frequency 200
     comment (starting cutoff frequency in Hz)
@@ -30,6 +35,18 @@ form Adaptive Low-Pass Filter
     positive scale_peak 0.99
     boolean play_after_processing 1
 endform
+
+# Apply preset values
+if preset$ = "Gentle Sweep"
+    start_cutoff_frequency = 300
+    end_cutoff_frequency = 1500
+elif preset$ = "Sharp Transition"
+    start_cutoff_frequency = 100
+    end_cutoff_frequency = 3000
+elif preset$ = "Narrow Band"
+    start_cutoff_frequency = 400
+    end_cutoff_frequency = 800
+endif
 
 # Check if a Sound is selected
 sound = selected("Sound")

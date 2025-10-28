@@ -21,6 +21,11 @@
 
 form Spectral Quantization
     comment This script applies low-bit quantization to the spectrum
+    optionmenu Preset: 1
+        option Default
+        option Subtle Quantization
+        option Heavy Quantization
+        option Wide Range
     comment WARNING: This process can have long runtime on long files
     comment due to FFT calculations
     comment Spectrum parameters:
@@ -40,6 +45,24 @@ form Spectral Quantization
     boolean play_after_processing 1
     boolean keep_intermediate_objects 0
 endform
+
+# Apply preset values
+if preset$ = "Subtle Quantization"
+    lower_frequency = 300
+    upper_frequency = 2500
+    quantization_steps = 4
+    outside_range_multiplier = 0.7
+elif preset$ = "Heavy Quantization"
+    lower_frequency = 100
+    upper_frequency = 4000
+    quantization_steps = 1
+    outside_range_multiplier = 0.3
+elif preset$ = "Wide Range"
+    lower_frequency = 50
+    upper_frequency = 6000
+    quantization_steps = 3
+    outside_range_multiplier = 0.5
+endif
 
 # Check if a Sound is selected
 if not selected("Sound")
@@ -72,6 +95,6 @@ endif
 
 # Clean up intermediate objects unless requested to keep
 if not keep_intermediate_objects
-    select spectrum
+    selectObject: spectrum
     Remove
 endif
