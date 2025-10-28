@@ -20,11 +20,27 @@
 # ============================================================
 
 form Fast Game of Life Synthesis
-    real Duration 8.0
+    optionmenu Preset: 1
+        option Custom
+        option Glider Gun
+        option Pulsar
+        option Random Chaos
+        option Stable Patterns
+        option Oscillators
+        option Spaceships
+        option Garden of Eden
+        option Dense Life
+        option Sparse Life
+        option Exploding Patterns
+        option Symmetrical
+        option Chaotic Growth
+        option Dying Universe
+        option Complex Evolution
+    real Duration 4.0
     real Sampling_frequency 44100
     integer Grid_size 12
     real Base_frequency 200
-    integer Total_steps 30
+    integer Total_steps 25
 endform
 
 echo Pre-computing Game of Life...
@@ -72,22 +88,267 @@ for step to total_steps
     endif
 endfor
 
-Create Sound from formula... fast_game_of_life 1 0 duration sampling_frequency 'formula$'
-Scale peak... 0.9
+Create Sound from formula: "fast_game_of_life", 1, 0, duration, sampling_frequency, formula$
+Scale peak: 0.9
+Play
 
 echo Fast Game of Life Synthesis complete!
+echo Preset: 'preset'
 
 procedure PrecomputeGameOfLife
-    for i to grid_size
-        for j to grid_size
-            if randomUniform(0,1) > 0.7
-                ca[1,i,j] = 1
-            else
+    # Initialize based on preset
+    if preset = 2
+        # Glider Gun - adjust grid size
+        grid_size = 20
+        # Initialize empty grid
+        for i to grid_size
+            for j to grid_size
                 ca[1,i,j] = 0
-            endif
+            endfor
         endfor
-    endfor
+        # Manually set Gosper glider gun points
+        ca[1,1,5] = 1
+        ca[1,1,6] = 1
+        ca[1,2,5] = 1
+        ca[1,2,6] = 1
+        ca[1,11,5] = 1
+        ca[1,11,6] = 1
+        ca[1,11,7] = 1
+        ca[1,12,4] = 1
+        ca[1,12,8] = 1
+        ca[1,13,3] = 1
+        ca[1,13,9] = 1
+        ca[1,14,3] = 1
+        ca[1,14,9] = 1
+        ca[1,15,6] = 1
+        ca[1,16,4] = 1
+        ca[1,16,8] = 1
+        ca[1,17,5] = 1
+        ca[1,17,6] = 1
+        ca[1,17,7] = 1
+        ca[1,18,6] = 1
+        
+    elsif preset = 3
+        # Pulsar - adjust grid size
+        grid_size = 15
+        # Initialize empty grid
+        for i to grid_size
+            for j to grid_size
+                ca[1,i,j] = 0
+            endfor
+        endfor
+        # Manually set pulsar points
+        ca[1,2,4] = 1
+        ca[1,2,5] = 1
+        ca[1,2,6] = 1
+        ca[1,2,10] = 1
+        ca[1,2,11] = 1
+        ca[1,2,12] = 1
+        ca[1,4,2] = 1
+        ca[1,4,7] = 1
+        ca[1,4,9] = 1
+        ca[1,4,14] = 1
+        ca[1,5,2] = 1
+        ca[1,5,7] = 1
+        ca[1,5,9] = 1
+        ca[1,5,14] = 1
+        ca[1,6,2] = 1
+        ca[1,6,7] = 1
+        ca[1,6,9] = 1
+        ca[1,6,14] = 1
+        ca[1,7,4] = 1
+        ca[1,7,5] = 1
+        ca[1,7,6] = 1
+        ca[1,7,10] = 1
+        ca[1,7,11] = 1
+        ca[1,7,12] = 1
+        ca[1,9,4] = 1
+        ca[1,9,5] = 1
+        ca[1,9,6] = 1
+        ca[1,9,10] = 1
+        ca[1,9,11] = 1
+        ca[1,9,12] = 1
+        ca[1,10,2] = 1
+        ca[1,10,7] = 1
+        ca[1,10,9] = 1
+        ca[1,10,14] = 1
+        ca[1,11,2] = 1
+        ca[1,11,7] = 1
+        ca[1,11,9] = 1
+        ca[1,11,14] = 1
+        ca[1,12,2] = 1
+        ca[1,12,7] = 1
+        ca[1,12,9] = 1
+        ca[1,12,14] = 1
+        ca[1,14,4] = 1
+        ca[1,14,5] = 1
+        ca[1,14,6] = 1
+        ca[1,14,10] = 1
+        ca[1,14,11] = 1
+        ca[1,14,12] = 1
+        
+    elsif preset = 4
+        # Random Chaos
+        for i to grid_size
+            for j to grid_size
+                if randomUniform(0,1) > 0.5
+                    ca[1,i,j] = 1
+                else
+                    ca[1,i,j] = 0
+                endif
+            endfor
+        endfor
+        
+    elsif preset = 5
+        # Stable Patterns
+        for i to grid_size
+            for j to grid_size
+                ca[1,i,j] = 0
+            endfor
+        endfor
+        # Block pattern
+        ca[1,5,5] = 1
+        ca[1,5,6] = 1
+        ca[1,6,5] = 1
+        ca[1,6,6] = 1
+        
+    elsif preset = 6
+        # Oscillators
+        for i to grid_size
+            for j to grid_size
+                ca[1,i,j] = 0
+            endfor
+        endfor
+        # Blinker pattern
+        ca[1,5,4] = 1
+        ca[1,5,5] = 1
+        ca[1,5,6] = 1
+        
+    elsif preset = 7
+        # Spaceships
+        grid_size = 16
+        for i to grid_size
+            for j to grid_size
+                ca[1,i,j] = 0
+            endfor
+        endfor
+        # Glider pattern
+        ca[1,2,1] = 1
+        ca[1,3,2] = 1
+        ca[1,1,3] = 1
+        ca[1,2,3] = 1
+        ca[1,3,3] = 1
+        
+    elsif preset = 8
+        # Garden of Eden (sparse)
+        for i to grid_size
+            for j to grid_size
+                if randomUniform(0,1) > 0.9
+                    ca[1,i,j] = 1
+                else
+                    ca[1,i,j] = 0
+                endif
+            endfor
+        endfor
+        
+    elsif preset = 9
+        # Dense Life
+        for i to grid_size
+            for j to grid_size
+                if randomUniform(0,1) > 0.3
+                    ca[1,i,j] = 1
+                else
+                    ca[1,i,j] = 0
+                endif
+            endfor
+        endfor
+        
+    elsif preset = 10
+        # Sparse Life
+        for i to grid_size
+            for j to grid_size
+                if randomUniform(0,1) > 0.85
+                    ca[1,i,j] = 1
+                else
+                    ca[1,i,j] = 0
+                endif
+            endfor
+        endfor
+        
+    elsif preset = 11
+        # Exploding Patterns
+        for i to grid_size
+            for j to grid_size
+                if (i mod 3 = 0 and j mod 3 = 0) or randomUniform(0,1) > 0.8
+                    ca[1,i,j] = 1
+                else
+                    ca[1,i,j] = 0
+                endif
+            endfor
+        endfor
+        
+    elsif preset = 12
+        # Symmetrical
+        for i to grid_size
+            for j to grid_size
+                if (i = j) or (i = grid_size - j + 1) or randomUniform(0,1) > 0.7
+                    ca[1,i,j] = 1
+                else
+                    ca[1,i,j] = 0
+                endif
+            endfor
+        endfor
+        
+    elsif preset = 13
+        # Chaotic Growth
+        for i to grid_size
+            for j to grid_size
+                if i = round(grid_size/2) or j = round(grid_size/2) or randomUniform(0,1) > 0.6
+                    ca[1,i,j] = 1
+                else
+                    ca[1,i,j] = 0
+                endif
+            endfor
+        endfor
+        
+    elsif preset = 14
+        # Dying Universe
+        for i to grid_size
+            for j to grid_size
+                if randomUniform(0,1) > 0.95
+                    ca[1,i,j] = 1
+                else
+                    ca[1,i,j] = 0
+                endif
+            endfor
+        endfor
+        
+    elsif preset = 15
+        # Complex Evolution
+        for i to grid_size
+            for j to grid_size
+                if (i + j) mod 4 = 0 or randomUniform(0,1) > 0.7
+                    ca[1,i,j] = 1
+                else
+                    ca[1,i,j] = 0
+                endif
+            endfor
+        endfor
+        
+    else
+        # Custom - original random initialization
+        for i to grid_size
+            for j to grid_size
+                if randomUniform(0,1) > 0.7
+                    ca[1,i,j] = 1
+                else
+                    ca[1,i,j] = 0
+                endif
+            endfor
+        endfor
+    endif
 
+    # Run Game of Life simulation
     for step from 2 to total_steps
         for i to grid_size
             for j to grid_size

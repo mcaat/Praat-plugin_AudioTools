@@ -20,38 +20,38 @@
 # ============================================================
 
 form AM Additive Synthesis Generator
-    choice texture_type: 1
-        button Harmonic Series
-        button Odd Harmonics
-        button Even Harmonics
-        button Inharmonic Cluster
-        button Golden Bells
-        button Octave Stack
-        button Fifth Stack
-        button Shepard Tone
-        button Spectral Comb
-        button Random Cloud
-        button Detuned Unison
-        button Harmonic Decay
-        button Rising Partials
-        button Filtered Spectrum
-        button Chaotic Swarm
+    optionmenu texture_type: 1
+        option Harmonic Series
+        option Odd Harmonics
+        option Even Harmonics
+        option Inharmonic Cluster
+        option Golden Bells
+        option Octave Stack
+        option Fifth Stack
+        option Shepard Tone
+        option Spectral Comb
+        option Random Cloud
+        option Detuned Unison
+        option Harmonic Decay
+        option Rising Partials
+        option Filtered Spectrum
+        option Chaotic Swarm
     positive duration 3.0
     positive fundamental 220
     positive num_partials 8
     real detune 0.1
     real chaos 0.3
-    choice envelope: 1
-        button No Envelope
-        button Percussive
-        button Slow Fade
-        button Gate
-        button Reverse
-        button Tremolo
-        button Swell
-        button ADSR
-        button Stutter
-        button Random Bursts
+    optionmenu envelope: 1
+        option No Envelope
+        option Percussive
+        option Slow Fade
+        option Gate
+        option Reverse
+        option Tremolo
+        option Swell
+        option ADSR
+        option Stutter
+        option Random Bursts
 endform
 
 sampling_frequency = 44100

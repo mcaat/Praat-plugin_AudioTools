@@ -19,6 +19,16 @@
 #   https://github.com/ShaiCohen-ops/Praat-plugin_AudioTools
 # ============================================================
 form PolyrhythmsFromDots
+    optionmenu Preset: 1
+        option Custom
+        option 3 vs 4 (Waltz)
+        option 5 vs 7 (Complex)
+        option 2 vs 3 (Simple)
+        option 4 vs 5 (Jazz)
+        option 3 vs 5 (African)
+        option 7 vs 8 (Dense)
+        option 4 vs 7 (Progressive)
+        option 5 vs 9 (Math Rock)
     comment Line 1 (Top - Left Channel)
     integer dots1 5
     comment Line 2 (Bottom - Right Channel)
@@ -34,6 +44,71 @@ form PolyrhythmsFromDots
     comment Panning
     real panAmount 0.8
 endform
+
+# Apply presets
+if preset > 1
+    if preset = 2
+        # 3 vs 4 (Waltz)
+        dots1 = 3
+        dots2 = 4
+        barDuration = 3.0
+        baseFreq = 196
+        
+    elsif preset = 3
+        # 5 vs 7 (Complex)
+        dots1 = 5
+        dots2 = 7
+        barDuration = 3.5
+        baseFreq = 220
+        
+    elsif preset = 4
+        # 2 vs 3 (Simple)
+        dots1 = 2
+        dots2 = 3
+        barDuration = 2.0
+        baseFreq = 165
+        
+    elsif preset = 5
+        # 4 vs 5 (Jazz)
+        dots1 = 4
+        dots2 = 5
+        barDuration = 4.0
+        baseFreq = 262
+        
+    elsif preset = 6
+        # 3 vs 5 (African)
+        dots1 = 3
+        dots2 = 5
+        barDuration = 2.5
+        baseFreq = 147
+        
+    elsif preset = 7
+        # 7 vs 8 (Dense)
+        dots1 = 7
+        dots2 = 8
+        barDuration = 4.0
+        baseFreq = 330
+        dotDur = 0.03
+        
+    elsif preset = 8
+        # 4 vs 7 (Progressive)
+        dots1 = 4
+        dots2 = 7
+        barDuration = 3.0
+        baseFreq = 196
+        
+    elsif preset = 9
+        # 5 vs 9 (Math Rock)
+        dots1 = 5
+        dots2 = 9
+        barDuration = 5.0
+        baseFreq = 220
+        dotDur = 0.04
+    endif
+endif
+
+echo Using preset: 'preset'
+echo Rhythm: 'dots1' vs 'dots2'
 
 Erase all
 
@@ -106,7 +181,7 @@ endfor
 select Sound leftChannel
 plus Sound rightChannel
 Combine to stereo
-Rename: "polyrhythm_7_5_panned"
+Rename: "polyrhythm_'dots1'_'dots2'_panned"
 
 # Play the final stereo sound
 Play
@@ -114,3 +189,5 @@ Play
 # Clean up all temporary objects
 select all
 Remove
+
+echo Polyrhythm 'dots1' vs 'dots2' complete!

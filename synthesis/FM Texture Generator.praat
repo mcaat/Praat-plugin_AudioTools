@@ -20,38 +20,38 @@
 # ============================================================
 
 form FM Texture Generator
-    choice texture_type: 1
-        button Classic FM Bell
-        button Brass Stack
-        button Electric Piano
-        button Organ Cluster
-        button Glass Harmonica
-        button Metallic Sweep
-        button Vocal Formant
-        button Alien Choir
-        button Wobble Bass
-        button Digital Noise
-        button Sidebanded Drone
-        button Harmonic Bells
-        button Chaotic FM
-        button Inharmonic Stack
-        button Feedback Scream
+    optionmenu texture_type: 1
+        option Classic FM Bell
+        option Brass Stack
+        option Electric Piano
+        option Organ Cluster
+        option Glass Harmonica
+        option Metallic Sweep
+        option Vocal Formant
+        option Alien Choir
+        option Wobble Bass
+        option Digital Noise
+        option Sidebanded Drone
+        option Harmonic Bells
+        option Chaotic FM
+        option Inharmonic Stack
+        option Feedback Scream
     positive duration 3.0
     positive carrier_freq 440
     positive modulator_ratio 2.0
     positive modulation_index 5.0
     real chaos 0.3
-    choice envelope: 1
-        button No Envelope
-        button Percussive
-        button Slow Fade
-        button Gate
-        button Reverse
-        button Tremolo
-        button Swell
-        button ADSR
-        button Stutter
-        button Random Bursts
+    optionmenu envelope: 1
+        option No Envelope
+        option Percussive
+        option Slow Fade
+        option Gate
+        option Reverse
+        option Tremolo
+        option Swell
+        option ADSR
+        option Stutter
+        option Random Bursts
 endform
 
 sampling_frequency = 44100

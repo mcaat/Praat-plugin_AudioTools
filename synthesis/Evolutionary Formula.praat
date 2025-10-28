@@ -20,7 +20,7 @@
 # ============================================================
 
 form Evolutionary Formula Synthesis System
-    positive Duration_(sec) 15.0
+    positive Duration_(sec) 5.0
     positive Base_frequency_(Hz) 80
     positive Number_of_layers 4
     real Modulation_depth 0.6

@@ -20,38 +20,38 @@
 # ============================================================
 
 form Physical Modeling Synthesis Generator
-    choice Model_type: 1
-        button Bowed String
-        button Blown Pipe
-        button Struck Bar
-        button Plucked Membrane
-        button Blown Bottle
-        button Scraped Surface
-        button Hammered String
-        button Reed Pipe
-        button Brass Lip
-        button Vocal Tract
-        button Struck Bell
-        button Bowed Glass
-        button Friction Drum
-        button Breath Noise
-        button Modal Resonator
+    optionmenu Model_type: 1
+        option Bowed String
+        option Blown Pipe
+        option Struck Bar
+        option Plucked Membrane
+        option Blown Bottle
+        option Scraped Surface
+        option Hammered String
+        option Reed Pipe
+        option Brass Lip
+        option Vocal Tract
+        option Struck Bell
+        option Bowed Glass
+        option Friction Drum
+        option Breath Noise
+        option Modal Resonator
     positive Duration_(s) 3.0
     positive Frequency_(Hz) 220
     real Excitation_strength_(0-1) 0.7
     real Damping_(0.9-0.999) 0.995
     real Chaos_(0-1) 0.3
-    choice Envelope: 1
-        button No Envelope
-        button Percussive
-        button Slow Fade
-        button Gate
-        button Reverse
-        button Tremolo
-        button Swell
-        button ADSR
-        button Stutter
-        button Random Bursts
+    optionmenu Envelope: 1
+        option No Envelope
+        option Percussive
+        option Slow Fade
+        option Gate
+        option Reverse
+        option Tremolo
+        option Swell
+        option ADSR
+        option Stutter
+        option Random Bursts
 endform
 
 sampling_frequency = 44100

@@ -20,34 +20,34 @@
 # ============================================================
 
 form Karplus-Strong Texture Generator
-    choice Texture_type: 1
-        button Plucked String
-        button Guitar Strum
-        button Harp Glissando
-        button Metallic Pluck
-        button Prepared Piano
-        button Sitar Drone
-        button Koto Cascade
-        button Banjo Roll
-        button Dulcimer Shimmer
-        button Steel Drum
-        button Granular Pluck
-        button Reversed Decay
-        button Bitcrushed String
-        button Frozen Resonance
-        button Chaos Feedback
+    optionmenu Texture_type: 1
+        option Plucked String
+        option Guitar Strum
+        option Harp Glissando
+        option Metallic Pluck
+        option Prepared Piano
+        option Sitar Drone
+        option Koto Cascade
+        option Banjo Roll
+        option Dulcimer Shimmer
+        option Steel Drum
+        option Granular Pluck
+        option Reversed Decay
+        option Bitcrushed String
+        option Frozen Resonance
+        option Chaos Feedback
     positive Duration_(s) 3.0
     positive Pitch_center_(Hz) 220
     real Damping_(0.9-0.999) 0.995
     real Chaos_(0-1) 0.3
-    choice Process: 1
-        button Clean
-        button Spectral Mirror
-        button Harmonic Enhancer
-        button Spectral Knots
-        button Frequency Fold
-        button Ring Shift
-        button Spectral Blur
+    optionmenu Process: 1
+        option Clean
+        option Spectral Mirror
+        option Harmonic Enhancer
+        option Spectral Knots
+        option Frequency Fold
+        option Ring Shift
+        option Spectral Blur
 endform
 
 sampling_frequency = 44100

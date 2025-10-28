@@ -20,7 +20,7 @@
 # ============================================================
 
 form Statistical Mass of Grains
-    real Duration 12.0
+    real Duration 5.0
     real Sampling_frequency 44100
     real Grain_density 40.0
     real Base_frequency 150
@@ -220,3 +220,4 @@ procedure BimodalDistribution
         endif
     endfor
 endproc
+Play
