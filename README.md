@@ -38,7 +38,7 @@ Developed for composers, sound designers, and researchers, the toolkit extends P
 ## Scripts Documentation
 
 **Interactive HTML documentation for all 254 scripts:**  
-[https://mashav.com/sha/praat/scripts/index.html](https://mashav.com/sha/praat/scripts/index.html)
+[https://mashav.com/sha/Praat%20AudioTools/)
 
 The documentation includes searchable guides with detailed parameter descriptions, usage examples, and technical explanations for each script.
 
