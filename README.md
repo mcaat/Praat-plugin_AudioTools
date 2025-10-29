@@ -46,25 +46,19 @@ The documentation includes searchable guides with detailed parameter description
 
 ## Key Features
 
-### Machine Learning Integration
-The toolkit now includes **6 neural network and PCA-based scripts** that leverage Praat's FFNet capabilities for intelligent audio processing:
-- **Adaptive effect control** using trained neural networks
-- **Phonetic classification** for context-aware processing
-- **PCA-driven timbre analysis and manipulation**
-- **Real-time parameter learning** from acoustic features
-
-### Creative Audio Processing
-- **Granular synthesis** with adaptive controls
-- **Spectral manipulation** and frequency-domain effects
-- **Multi-band dynamics** and compression
-- **Fractal and algorithmic reverbs**
-- **Multichannel spatialization** (up to 8 channels)
-
-### Analysis & Synthesis
-- **Feature extraction** (MFCC, spectral descriptors, formants)
-- **Algorithmic composition** tools (Markov chains, cellular automata, stochastic processes)
-- **Image sonification** for visual-to-audio mapping
-- **Cross-synthesis** and vocoding
+- **Offline, object-centric workflow
+- **Edit PitchTiers, FormantGrids, TextGrids, and Tables as compositional scores. Work in an edit → render → listen loop with full reproducibility.
+- **250+ processes across categories
+- **Analysis, delay and temporal, distortion and dynamics, spectral and filter (FFT and LPC), modulation, pitch, convolution and reverb, spatial, and synthesis.
+- **Analysis-driven mappings
+- **Map pitch, formants and bandwidths, intensity, spectral centroid and flatness, zero-crossing rate, jitter, shimmer, and HNR directly to transformation parameters.
+- **Flagship scripts (ready to use)
+- **Adaptive Grain Cloud Synthesis (formant and spectral descriptor control of grain density, duration, and scatter)
+- **8-Channel Spatial Canon / Speed Deviations (prosody to space: F0, intensity, speaking rate, jitter)
+- **Reproducible by design
+- **Scriptable parameters, seeds captured, versioned presets, optional ablation variants for method comparison.
+- **Interoperability for composition
+- **Cross-platform
 
 ---
 
