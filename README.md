@@ -46,19 +46,19 @@ The documentation includes searchable guides with detailed parameter description
 
 ## Key Features
 
-- **Offline, object-centric workflow
-- **Edit PitchTiers, FormantGrids, TextGrids, and Tables as compositional scores. Work in an edit → render → listen loop with full reproducibility.
-- **250+ processes across categories
-- **Analysis, delay and temporal, distortion and dynamics, spectral and filter (FFT and LPC), modulation, pitch, convolution and reverb, spatial, and synthesis.
-- **Analysis-driven mappings
-- **Map pitch, formants and bandwidths, intensity, spectral centroid and flatness, zero-crossing rate, jitter, shimmer, and HNR directly to transformation parameters.
-- **Flagship scripts (ready to use)
-- **Adaptive Grain Cloud Synthesis (formant and spectral descriptor control of grain density, duration, and scatter)
-- **8-Channel Spatial Canon / Speed Deviations (prosody to space: F0, intensity, speaking rate, jitter)
-- **Reproducible by design
-- **Scriptable parameters, seeds captured, versioned presets, optional ablation variants for method comparison.
-- **Interoperability for composition
-- **Cross-platform
+- Offline, object-centric workflow
+- Edit PitchTiers, FormantGrids, TextGrids, and Tables as compositional scores. Work in an edit → render → listen loop with full reproducibility.
+- 250+ processes across categories
+- Analysis, delay and temporal, distortion and dynamics, spectral and filter (FFT and LPC), modulation, pitch, convolution and reverb, spatial, and synthesis.
+- Analysis-driven mappings
+- Map pitch, formants and bandwidths, intensity, spectral centroid and flatness, zero-crossing rate, jitter, shimmer, and HNR directly to transformation parameters.
+- Flagship scripts (ready to use)
+- Adaptive Grain Cloud Synthesis (formant and spectral descriptor control of grain density, duration, and scatter)
+- 8-Channel Spatial Canon / Speed Deviations (prosody to space: F0, intensity, speaking rate, jitter)
+- Reproducible by design
+- Scriptable parameters, seeds captured, versioned presets, optional ablation variants for method comparison.
+- Interoperability for composition
+- Cross-platform
 
 ---
 
