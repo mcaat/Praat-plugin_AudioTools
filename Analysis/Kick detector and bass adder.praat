@@ -1,3 +1,24 @@
+# ============================================================
+# Praat AudioTools - Kick detector and bass adder.praat
+# Author: Shai Cohen
+# Affiliation: Department of Music, Bar-Ilan University, Israel
+# Email: shai.cohen@biu.ac.il
+# Version: 0.1 (2025)
+# License: MIT License
+# Repository: https://github.com/ShaiCohen-ops/Praat-plugin_AudioTools
+#
+# Description:
+#   Kick detector and bass adder
+#
+# Usage:
+#   Select a Sound object in Praat and run this script.
+#   
+#
+# Citation:
+#   Cohen, S. (2025). Praat AudioTools: An Offline Analysis–Resynthesis Toolkit for Experimental Composition.
+#   https://github.com/ShaiCohen-ops/Praat-plugin_AudioTools
+# ============================================================
+
 ################################################################################
 # Kick detector and bass adder                                                 #
 # Select TWO Sounds: 1) Full drum loop, 2) Bass sample, then run              #
