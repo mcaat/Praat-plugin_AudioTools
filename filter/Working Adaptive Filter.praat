@@ -1,5 +1,5 @@
 # ============================================================
-# Praat AudioTools - Working Adaptive Filter.praat
+# Praat AudioTools - Adaptive Filter.praat
 # Author: Shai Cohen
 # Affiliation: Department of Music, Bar-Ilan University, Israel
 # Email: shai.cohen@biu.ac.il

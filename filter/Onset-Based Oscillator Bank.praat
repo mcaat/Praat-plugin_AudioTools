@@ -20,29 +20,147 @@
 # ============================================================
 
 form Onset-Based Oscillator Bank
-    comment === Onset Detection ===
+    comment ==== Presets ====
+    optionmenu Preset: 1
+        option Custom
+        option Gentle Resonance (soft, musical)
+        option Percussive Bells (bright, sharp)
+        option Ethereal Pad (long decay, many partials)
+        option Metallic Shimmer (bright, complex)
+        option Natural Pluck (quick decay, few partials)
+        option Dense Cluster (many partials, random)
+    comment ==== Onset Detection ====
     positive onset_threshold 1.5
+    comment (dB change threshold for detecting onsets)
     positive onset_silence_threshold 35.0
+    comment (minimum intensity in dB to consider)
     positive onset_min_interval 0.1
-    
-    comment === Oscillator Settings ===
+    comment (minimum time between onsets in seconds)
+    comment ==== Oscillator Settings ====
     integer num_partials 12
+    comment (number of harmonics per onset)
     positive partial_spread 0.5
-    
-    comment === Envelope Randomization ===
+    comment (randomization of partial frequencies 0-1)
+    comment ==== Envelope Randomization ====
     positive attack_base 0.005
+    comment (base attack time in seconds)
     positive attack_random 0.01
+    comment (random variation in attack)
     positive decay_base 1.5
+    comment (base decay time in seconds)
     positive decay_random 0.8
+    comment (random variation in decay)
     positive amplitude_random 0.3
-    
-    comment === Waveshaper ===
+    comment (amplitude randomization 0-1)
+    comment ==== Waveshaper ====
     real brightness 0.7
+    comment (brightness/harmonic content 0-1)
     positive waveshape_amount 0.2
-    
-    comment === Mix ===
+    comment (amount of waveshaping distortion)
+    comment ==== Mix ====
     real dry_wet 1.0
+    comment (0=dry original, 1=wet processed)
+    comment ==== Output ====
+    boolean play_after_processing 1
 endform
+
+# Apply preset values if not Custom
+if preset = 2
+    # Gentle Resonance
+    onset_threshold = 2.0
+    onset_silence_threshold = 35.0
+    onset_min_interval = 0.15
+    num_partials = 8
+    partial_spread = 0.3
+    attack_base = 0.01
+    attack_random = 0.015
+    decay_base = 2.0
+    decay_random = 0.5
+    amplitude_random = 0.2
+    brightness = 0.5
+    waveshape_amount = 0.1
+    dry_wet = 0.7
+elsif preset = 3
+    # Percussive Bells
+    onset_threshold = 1.5
+    onset_silence_threshold = 40.0
+    onset_min_interval = 0.08
+    num_partials = 15
+    partial_spread = 0.8
+    attack_base = 0.002
+    attack_random = 0.003
+    decay_base = 1.0
+    decay_random = 0.4
+    amplitude_random = 0.4
+    brightness = 0.9
+    waveshape_amount = 0.3
+    dry_wet = 1.0
+elsif preset = 4
+    # Ethereal Pad
+    onset_threshold = 2.5
+    onset_silence_threshold = 30.0
+    onset_min_interval = 0.2
+    num_partials = 20
+    partial_spread = 0.2
+    attack_base = 0.05
+    attack_random = 0.03
+    decay_base = 3.5
+    decay_random = 1.0
+    amplitude_random = 0.15
+    brightness = 0.6
+    waveshape_amount = 0.15
+    dry_wet = 0.8
+elsif preset = 5
+    # Metallic Shimmer
+    onset_threshold = 1.2
+    onset_silence_threshold = 35.0
+    onset_min_interval = 0.1
+    num_partials = 18
+    partial_spread = 1.0
+    attack_base = 0.003
+    attack_random = 0.005
+    decay_base = 1.2
+    decay_random = 0.6
+    amplitude_random = 0.5
+    brightness = 1.0
+    waveshape_amount = 0.4
+    dry_wet = 1.0
+elsif preset = 6
+    # Natural Pluck
+    onset_threshold = 1.5
+    onset_silence_threshold = 35.0
+    onset_min_interval = 0.12
+    num_partials = 6
+    partial_spread = 0.4
+    attack_base = 0.001
+    attack_random = 0.002
+    decay_base = 0.8
+    decay_random = 0.3
+    amplitude_random = 0.25
+    brightness = 0.7
+    waveshape_amount = 0.15
+    dry_wet = 0.9
+elsif preset = 7
+    # Dense Cluster
+    onset_threshold = 1.0
+    onset_silence_threshold = 32.0
+    onset_min_interval = 0.05
+    num_partials = 25
+    partial_spread = 1.2
+    attack_base = 0.008
+    attack_random = 0.02
+    decay_base = 1.8
+    decay_random = 1.2
+    amplitude_random = 0.6
+    brightness = 0.8
+    waveshape_amount = 0.25
+    dry_wet = 1.0
+endif
+
+# Check if a Sound is selected
+if not selected("Sound")
+    exitScript: "Please select a Sound object first."
+endif
 
 # Get selected sound
 sound = selected("Sound")
@@ -110,7 +228,6 @@ endfor
 
 appendInfoLine: ""
 appendInfoLine: "Maximum intensity difference found: ", fixed$(max_diff, 2), " dB"
-
 writeInfoLine: "Detected ", num_onsets, " onsets"
 
 # Create output sound (start with silence)
@@ -161,45 +278,46 @@ for onset_idx from 1 to num_onsets
                 appendInfoLine: "Onset ", onset_idx, " at ", fixed$(onset_time, 3), "s - Pitch: ", fixed$(pitch, 1), " Hz"
             endif
         
-        # Create oscillator bank for this onset
-        for partial from 1 to num_partials
-            # Calculate partial frequency with slight randomization
-            freq = pitch * partial * (1 + randomUniform(-0.01, 0.01) * partial_spread)
-            
-            # Randomize envelope parameters
-            attack = attack_base + randomUniform(0, attack_random)
-            decay = decay_base + randomUniform(-decay_random, decay_random)
-            decay = max(decay, 0.05)
-            
-            # Randomize amplitude (decreasing with partial number)
-            base_amp = 0.15 / sqrt(partial)
-            amp = base_amp * (1 + randomUniform(-amplitude_random, amplitude_random))
-            
-            # Calculate envelope duration
-            env_duration = attack + decay
-            end_time = min(onset_time + env_duration, duration)
-            
-            # Create sine wave for full duration, positioned at onset time
-            selectObject: output
-            Formula (part): onset_time, end_time, 1, num_channels,
-                ... "self + " + string$(amp) + " * sin(2*pi*" + string$(freq) + "*(x-" + string$(onset_time) + "))" +
-                ... " * if (x-" + string$(onset_time) + ") < " + string$(attack) + 
-                ... " then (x-" + string$(onset_time) + ")/" + string$(attack) + 
-                ... " else exp(-((x-" + string$(onset_time) + ")-" + string$(attack) + ")/" + string$(decay) + ") fi"
-            
-            # Apply waveshaping if enabled
-            if waveshape_amount > 0
-                waveshape_factor = 1 + waveshape_amount * brightness
+            # Create oscillator bank for this onset
+            for partial from 1 to num_partials
+                # Calculate partial frequency with slight randomization
+                freq = pitch * partial * (1 + randomUniform(-0.01, 0.01) * partial_spread)
                 
+                # Randomize envelope parameters
+                attack = attack_base + randomUniform(0, attack_random)
+                decay = decay_base + randomUniform(-decay_random, decay_random)
+                decay = max(decay, 0.05)
+                
+                # Randomize amplitude (decreasing with partial number)
+                base_amp = 0.15 / sqrt(partial)
+                amp = base_amp * (1 + randomUniform(-amplitude_random, amplitude_random))
+                
+                # Calculate envelope duration
+                env_duration = attack + decay
+                end_time = min(onset_time + env_duration, duration)
+                
+                # Create sine wave for full duration, positioned at onset time
                 selectObject: output
                 Formula (part): onset_time, end_time, 1, num_channels,
-                    ... "self + " + string$(waveshape_amount * amp * waveshape_factor) + 
-                    ... " * (sin(2*pi*" + string$(freq) + "*(x-" + string$(onset_time) + ")))^3" +
+                    ... "self + " + string$(amp) + " * sin(2*pi*" + string$(freq) + "*(x-" + string$(onset_time) + "))" +
                     ... " * if (x-" + string$(onset_time) + ") < " + string$(attack) + 
                     ... " then (x-" + string$(onset_time) + ")/" + string$(attack) + 
                     ... " else exp(-((x-" + string$(onset_time) + ")-" + string$(attack) + ")/" + string$(decay) + ") fi"
-            endif
-        endfor
+                
+                # Apply waveshaping if enabled
+                if waveshape_amount > 0
+                    waveshape_factor = 1 + waveshape_amount * brightness
+                    
+                    selectObject: output
+                    Formula (part): onset_time, end_time, 1, num_channels,
+                        ... "self + " + string$(waveshape_amount * amp * waveshape_factor) + 
+                        ... " * (sin(2*pi*" + string$(freq) + "*(x-" + string$(onset_time) + ")))^3" +
+                        ... " * if (x-" + string$(onset_time) + ") < " + string$(attack) + 
+                        ... " then (x-" + string$(onset_time) + ")/" + string$(attack) + 
+                        ... " else exp(-((x-" + string$(onset_time) + ")-" + string$(attack) + ")/" + string$(decay) + ") fi"
+                endif
+            endfor
+        endif
     endif
 endfor
 
@@ -215,12 +333,11 @@ endif
 # Normalize output
 selectObject: output
 Scale peak: 0.99
-Play
 
-# Select final output
-selectObject: output
+# Cleanup
 removeObject: intensity
 
+# Final statistics
 writeInfoLine: "Processing complete!"
 appendInfoLine: "Created oscillator bank with ", num_partials, " partials per onset"
 appendInfoLine: "Total onsets detected: ", num_onsets
@@ -228,3 +345,11 @@ appendInfoLine: "Successful pitch detections: ", successful_onsets
 selectObject: output
 max_amplitude = Get maximum: 0, 0, "None"
 appendInfoLine: "Output maximum amplitude: ", fixed$(max_amplitude, 6)
+
+# Play if requested
+if play_after_processing
+    Play
+endif
+
+# Select final output and original for comparison
+plus sound

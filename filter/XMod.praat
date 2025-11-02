@@ -21,15 +21,46 @@
 
 form Rhythmic Gating
     comment This script applies rhythmic on/off gating to the sound
-    comment Gating parameters:
+    comment ==== Presets ====
+    optionmenu Preset: 1
+        option Custom
+        option Fast Stutter (100ms cycle)
+        option Medium Pulse (250ms cycle)
+        option Slow Pulse (500ms cycle)
+        option Tremolo (150ms cycle)
+        option Helicopter (80ms cycle)
+    comment ==== Gating parameters ====
     positive gate_period 0.1
     comment (duration of one complete gate cycle in seconds)
     positive gate_duty_cycle 0.05
     comment (duration gate is OFF before turning ON)
-    comment Output options:
+    comment ==== Output options ====
     positive scale_peak 0.99
     boolean play_after_processing 1
 endform
+
+# Apply preset values if not Custom
+if preset = 2
+    # Fast Stutter
+    gate_period = 0.1
+    gate_duty_cycle = 0.05
+elsif preset = 3
+    # Medium Pulse
+    gate_period = 0.25
+    gate_duty_cycle = 0.125
+elsif preset = 4
+    # Slow Pulse
+    gate_period = 0.5
+    gate_duty_cycle = 0.25
+elsif preset = 5
+    # Tremolo
+    gate_period = 0.15
+    gate_duty_cycle = 0.075
+elsif preset = 6
+    # Helicopter
+    gate_period = 0.08
+    gate_duty_cycle = 0.04
+endif
 
 # Check if a Sound is selected
 if not selected("Sound")
