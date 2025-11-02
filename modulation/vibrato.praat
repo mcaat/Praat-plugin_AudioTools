@@ -20,21 +20,68 @@
 # ============================================================
 
 form Sine Vibrato Effect
-    comment This script applies simple sine wave vibrato
-    comment Delay parameters:
+    comment ==== Presets ====
+    optionmenu Preset: 1
+        option Custom
+        option Subtle Vocal Vibrato (6Hz, gentle)
+        option Classic Chorus (5Hz, moderate)
+        option Slow Leslie (1.5Hz, deep)
+        option Fast Tremolo (8Hz, intense)
+        option Gentle Warble (3Hz, subtle)
+        option Extreme Wobble (12Hz, extreme)
+    comment ==== Delay Parameters ====
     positive base_delay_ms 5.0
     comment (base delay time in milliseconds)
     positive modulation_depth 0.10
-    comment (depth of delay modulation)
-    comment Modulation parameters:
+    comment (depth of delay modulation, 0-1)
+    comment ==== Modulation Parameters ====
     positive modulation_rate_hz 5.0
-    comment (vibrato frequency)
+    comment (vibrato frequency in Hz)
     real initial_phase_radians 0.0
-    comment (starting phase in radians)
-    comment Output options:
+    comment (starting phase in radians, 0 to 2π)
+    comment ==== Output Options ====
     positive scale_peak 0.99
     boolean play_after_processing 1
 endform
+
+# Apply preset values if not Custom
+if preset = 2
+    # Subtle Vocal Vibrato
+    base_delay_ms = 4.0
+    modulation_depth = 0.08
+    modulation_rate_hz = 6.0
+    initial_phase_radians = 0.0
+elsif preset = 3
+    # Classic Chorus
+    base_delay_ms = 5.0
+    modulation_depth = 0.10
+    modulation_rate_hz = 5.0
+    initial_phase_radians = 0.0
+elsif preset = 4
+    # Slow Leslie
+    base_delay_ms = 8.0
+    modulation_depth = 0.20
+    modulation_rate_hz = 1.5
+    initial_phase_radians = 0.0
+elsif preset = 5
+    # Fast Tremolo
+    base_delay_ms = 3.0
+    modulation_depth = 0.15
+    modulation_rate_hz = 8.0
+    initial_phase_radians = 0.0
+elsif preset = 6
+    # Gentle Warble
+    base_delay_ms = 6.0
+    modulation_depth = 0.06
+    modulation_rate_hz = 3.0
+    initial_phase_radians = 0.0
+elsif preset = 7
+    # Extreme Wobble
+    base_delay_ms = 10.0
+    modulation_depth = 0.30
+    modulation_rate_hz = 12.0
+    initial_phase_radians = 0.0
+endif
 
 # Check if a Sound is selected
 if not selected("Sound")
@@ -66,5 +113,3 @@ Scale peak: scale_peak
 if play_after_processing
     Play
 endif
-
-
