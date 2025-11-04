@@ -120,13 +120,11 @@ Scale peak: 0.99
 selectObject: oddSound, evenSound
 stereoOutput = Combine to stereo
 Rename: soundName$ + output_suffix$
+Play
 
 # Cleanup - remove everything except original and result
 selectObject: extracted, oddSound, evenSound
 Remove
-
-# Select original and result
-selectObject: sound, stereoOutput
 
 appendInfoLine: ""
 appendInfoLine: "=== Complete ==="
