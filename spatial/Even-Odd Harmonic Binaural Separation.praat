@@ -1,4 +1,25 @@
-# PRAAT Script: Even-Odd Harmonic Separation (Clean Version)
+# ============================================================
+# Praat AudioTools - Even-Odd Harmonic Separation .praat
+# Author: Shai Cohen
+# Affiliation: Department of Music, Bar-Ilan University, Israel
+# Email: shai.cohen@biu.ac.il
+# Version: 0.2 (2025) - Enhanced with presets
+# License: MIT License
+# Repository: https://github.com/ShaiCohen-ops/Praat-plugin_AudioTools
+#
+# Description:
+#   Even-Odd Harmonic Separation 
+#
+# Usage:
+#   Select a Sound object in Praat and run this script.
+#   Adjust parameters via the form dialog.
+#
+# Citation:
+#   Cohen, S. (2025). Praat AudioTools: An Offline Analysis—Resynthesis Toolkit for Experimental Composition.
+#   https://github.com/ShaiCohen-ops/Praat-plugin_AudioTools
+# ============================================================
+
+# PRAAT Script: Even-Odd Harmonic Separation 
 form Parameters
     positive Fundamental_frequency_(F0) 100
     positive Maximum_frequency 5000
