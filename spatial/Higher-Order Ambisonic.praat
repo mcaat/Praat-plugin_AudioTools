@@ -21,9 +21,8 @@
 # Higher-Order Ambisonic (HOA) Encoder with Visualization
 # This script encodes a mono sound source into ambisonic channels
 # Supports 1st, 2nd, and 3rd order ambisonics
-# Creates a multichannel sound object with all ambisonic channels
 # Shows a top-down visualization of the source position
-Erase all
+clearinfo
 form Ambisonic Encoder
     comment Select a Sound object first, then run this script
     optionmenu Position_preset 1
@@ -47,7 +46,6 @@ form Ambisonic Encoder
         option 2nd order (9 channels)
         option 3rd order (16 channels)
     boolean Normalize_output 1
-    boolean Create_multichannel_sound 1
     boolean Show_visualization 1
 endform
 
@@ -106,7 +104,7 @@ if num_channels > 1
     appendInfoLine: "Converting to mono..."
     selectObject: original_sound
     sound = Convert to mono
-    sound_name$ = original_name$ + "_mono"
+    sound_name$ = original_name$
     Rename: sound_name$
     appendInfoLine: "Created mono version: ", sound_name$
 else
@@ -303,52 +301,6 @@ if normalize_output
     endif
 endif
 
-if create_multichannel_sound
-    appendInfoLine: ""
-    appendInfoLine: "====================================="
-    appendInfoLine: "Creating multichannel sound object..."
-    
-    selectObject: w
-    plus y
-    plus z
-    plus x
-    
-    if ambisonic_order >= 2
-        plus v
-        plus t
-        plus r
-        plus s
-        plus u
-    endif
-    
-    if ambisonic_order >= 3
-        plus q
-        plus o
-        plus m
-        plus k
-        plus l
-        plus n
-        plus p
-    endif
-    
-    if ambisonic_order = 1
-        multichannel = Combine to stereo
-        Rename: sound_name$ + "_Ambisonic_1st"
-        appendInfoLine: "Created 4-channel sound: ", sound_name$ + "_Ambisonic_1st"
-        appendInfoLine: "Channel order: W, Y, Z, X (ACN)"
-    elsif ambisonic_order = 2
-        multichannel = Concatenate
-        Rename: sound_name$ + "_Ambisonic_2nd"
-        appendInfoLine: "Created 9-channel sound: ", sound_name$ + "_Ambisonic_2nd"
-        appendInfoLine: "Channel order: W, Y, Z, X, V, T, R, S, U (ACN)"
-    else
-        multichannel = Concatenate
-        Rename: sound_name$ + "_Ambisonic_3rd"
-        appendInfoLine: "Created 16-channel sound: ", sound_name$ + "_Ambisonic_3rd"
-        appendInfoLine: "Channel order: W, Y, Z, X, V, T, R, S, U, Q, O, M, K, L, N, P (ACN)"
-    endif
-endif
-
 if show_visualization
     appendInfoLine: ""
     appendInfoLine: "====================================="
@@ -428,11 +380,7 @@ else
     appendInfoLine: "Created 16 ambisonic channels (3rd order)"
 endif
 
-if create_multichannel_sound
-    appendInfoLine: "Created multichannel ambisonic sound object"
-    appendInfoLine: "Individual channels (W, Y, Z, X, ...) are also available"
-endif
-
+appendInfoLine: "Individual channels (W, Y, Z, X, ...) are available in Objects list"
 appendInfoLine: "====================================="
 
 
