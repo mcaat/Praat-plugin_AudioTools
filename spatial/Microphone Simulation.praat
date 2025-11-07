@@ -18,7 +18,7 @@
 #   Cohen, S. (2025). Praat AudioTools: An Offline Analysis–Resynthesis Toolkit for Experimental Composition.
 #   https://github.com/ShaiCohen-ops/Praat-plugin_AudioTools
 # ============================================================
-
+clearinfo
 # Microphone Simulation 
 
 form Microphone Simulation Options
@@ -312,19 +312,31 @@ elsif stereo_config$ == "Blumlein pair"
     Remove
     
 # ============================================
-# AB PAIR (SPACED OMNIS - CORRECTED)
+# AB PAIR (GEOMETRY-BASED DELAYS - CORRECTED)
 # ============================================
 elsif stereo_config$ == "AB pair (omnis only)"
-    # AB uses omnidirectional microphones (pattern ignored for physical accuracy)
+    # AB uses omnidirectional microphones with spacing-based time delays
+    # Uses same geometry-based approach as Decca Tree for physical accuracy
     spacing_m = mic_spacing_cm / 100
     
-    # Calculate time delays (ITD only, no level difference)
-    delta_t = (spacing_m / speedOfSound) * sin(azimuth_rad)
-    delta_samples = delta_t / sampleRate
+    # Calculate source position in Cartesian coordinates (origin at array center)
+    source_x = distance_m * sin(azimuth_rad)
+    source_y = distance_m * cos(azimuth_rad)
     
-    # Left mic is at -spacing/2, right at +spacing/2
-    left_delay_samples = -delta_samples / 2
-    right_delay_samples = delta_samples / 2
+    # Calculate distance from source to each microphone position
+    # Left mic at (-spacing/2, 0), Right mic at (+spacing/2, 0)
+    dist_to_left = sqrt((source_x - (-spacing_m/2))^2 + source_y^2)
+    dist_to_right = sqrt((source_x - spacing_m/2)^2 + source_y^2)
+    
+    # Use the closest mic as reference (zero delay)
+    min_dist = min(dist_to_left, dist_to_right)
+    
+    # Calculate delays relative to closest mic (physically accurate arrival times)
+    tau_l = (dist_to_left - min_dist) / speedOfSound
+    tau_r = (dist_to_right - min_dist) / speedOfSound
+    
+    left_delay_samples = tau_l / sampleRate
+    right_delay_samples = tau_r / sampleRate
     
     selectObject: monoSound
     left = Copy: soundName$ + "_ab_L"
@@ -335,6 +347,13 @@ elsif stereo_config$ == "AB pair (omnis only)"
     right = Copy: soundName$ + "_ab_R"
     @applyFractionalDelay: right, right_delay_samples
     right = applyFractionalDelay.result
+    
+    # Apply inverse-distance amplitude differences (optional but physically correct)
+    selectObject: left
+    Formula: ~ self * (min_dist / dist_to_left)
+    
+    selectObject: right
+    Formula: ~ self * (min_dist / dist_to_right)
     
     selectObject: left, right
     finalSound = Combine to stereo
@@ -377,27 +396,38 @@ elsif stereo_config$ == "ORTF pair"
     Remove
     
 # ============================================
-# DECCA TREE (CORRECTED WITH FRACTIONAL DELAYS)
+# DECCA TREE (REALISTIC WITH GEOMETRY-BASED DELAYS)
 # ============================================
 elsif stereo_config$ == "Decca Tree"
-    # Classic Decca Tree: L-C-R omnis
-    # L/R: ±1m lateral, C: 1.5m forward
+    # Classic Decca Tree: L-C-R omnis (2m spacing, 1.5m forward center)
+    # Uses realistic geometry-based delays and amplitude for natural spatial imaging
+    
     decca_spacing = 2.0
     center_forward = 1.5
     
-    # Calculate delays for each mic position
-    # Left mic at (-1, 0)
-    tau_l = (-decca_spacing/2 * sin(azimuth_rad) + 0 * cos(azimuth_rad)) / speedOfSound
-    # Center mic at (0, 1.5)
-    tau_c = (0 * sin(azimuth_rad) + center_forward * cos(azimuth_rad)) / speedOfSound  
-    # Right mic at (+1, 0)
-    tau_r = (decca_spacing/2 * sin(azimuth_rad) + 0 * cos(azimuth_rad)) / speedOfSound
+    # Calculate source position in Cartesian coordinates (origin at array center)
+    source_x = distance_m * sin(azimuth_rad)
+    source_y = distance_m * cos(azimuth_rad)
+    
+    # Calculate distance from source to each microphone position
+    # Left mic at (-1, 0), Center at (0, 1.5), Right at (+1, 0)
+    dist_to_left = sqrt((source_x - (-decca_spacing/2))^2 + source_y^2)
+    dist_to_center = sqrt(source_x^2 + (source_y - center_forward)^2)
+    dist_to_right = sqrt((source_x - decca_spacing/2)^2 + source_y^2)
+    
+    # Use the closest mic as reference (zero delay) to minimize absolute delays
+    min_dist = min(dist_to_left, min(dist_to_center, dist_to_right))
+    
+    # Calculate delays relative to closest mic (physically accurate arrival times)
+    tau_l = (dist_to_left - min_dist) / speedOfSound
+    tau_c = (dist_to_center - min_dist) / speedOfSound
+    tau_r = (dist_to_right - min_dist) / speedOfSound
     
     delta_samples_l = tau_l / sampleRate
     delta_samples_c = tau_c / sampleRate
     delta_samples_r = tau_r / sampleRate
     
-    # Create three omni mics with delays
+    # Create three omni mics with realistic arrival time delays
     selectObject: monoSound
     left = Copy: soundName$ + "_decca_L"
     @applyFractionalDelay: left, delta_samples_l
@@ -413,7 +443,19 @@ elsif stereo_config$ == "Decca Tree"
     @applyFractionalDelay: right, delta_samples_r
     right = applyFractionalDelay.result
     
-    # Mix to stereo (L+0.7C, R+0.7C)
+    # Apply inverse-distance amplitude differences (subtle but physically correct)
+    selectObject: left
+    Formula: ~ self * (min_dist / dist_to_left)
+    
+    selectObject: center
+    Formula: ~ self * (min_dist / dist_to_center)
+    
+    selectObject: right
+    Formula: ~ self * (min_dist / dist_to_right)
+    
+    # Mix to stereo with classic Decca Tree ratios (L+0.7C, R+0.7C)
+    # The geometry-based delays create natural stereo imaging
+    # The 0.7 center contribution provides coherent center fill without phase issues
     selectObject: left
     left_mix = Copy: soundName$ + "_left_mix"
     selectObject: left_mix
@@ -456,7 +498,7 @@ endif
 # REPORT
 # ============================================
 appendInfoLine: "========================================"
-appendInfoLine: "PHYSICALLY ACCURATE MICROPHONE SIMULATION v2.3"
+appendInfoLine: "PHYSICALLY ACCURATE MICROPHONE SIMULATION v2.6"
 appendInfoLine: "========================================"
 if preset$ != "Custom"
     appendInfoLine: "Preset: ", preset$
@@ -465,15 +507,22 @@ appendInfoLine: "Pattern: ", pattern$
 appendInfoLine: "Configuration: ", stereo_config$
 appendInfoLine: "Source azimuth: ", azimuth_degrees, "° (0°=front, ±90°=sides, ±180°=back)"
 appendInfoLine: "Source distance: ", distance_cm, " cm"
-if stereo_config$ == "AB pair (omnis only)" or stereo_config$ == "ORTF pair" or stereo_config$ == "Decca Tree"
+if stereo_config$ == "AB pair (omnis only)"
+    appendInfoLine: "Mic spacing: ", mic_spacing_cm, " cm (geometry-based delays + amplitude)"
+elsif stereo_config$ == "ORTF pair"
     appendInfoLine: "Mic spacing: ", mic_spacing_cm, " cm"
+elsif stereo_config$ == "Decca Tree"
+    appendInfoLine: "Decca Tree: 2m L-R spacing, 1.5m center forward"
+    appendInfoLine: "NOTE: Uses geometry-based delays and amplitudes for realistic imaging"
 endif
 appendInfoLine: "Near-field distance: ", if apply_near_field_distance then "ENABLED (1/r)" else "disabled (far-field)" fi
 appendInfoLine: ""
 appendInfoLine: "CORRECTIONS APPLIED:"
 appendInfoLine: "✓ M/S polarity: CORRECTED (S positive = left)"
 appendInfoLine: "✓ Delays: Fractional-sample (sinc interpolation)"
-appendInfoLine: "✓ AB pair: Omni-only (as documented)"
+appendInfoLine: "✓ AB pair: Geometry-based positioning (realistic, includes amplitude)"
 appendInfoLine: "✓ XY pair: Directional mics only (validated)"
+appendInfoLine: "✓ Decca Tree: Geometry-based positioning (realistic, natural)"
 appendInfoLine: "✓ Distance: ", if apply_near_field_distance then "Applied (1/r amplitude)" else "Far-field model" fi
 appendInfoLine: "========================================"
+
