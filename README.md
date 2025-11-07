@@ -29,9 +29,11 @@ Developed for composers, sound designers, and researchers, the toolkit extends P
    - **macOS:**     `~/Library/Preferences/Praat/plugins/`
    - **Linux:**     `~/.praat-dir/plugins/`
 
-3. **Copy the folder** `plugin_AudioTools` into the plugins directory.
+3. **Copy the folder**⚠️ Important – Rename the folder after downloading or cloning, ensure that the folder name is exactly:`plugin_AudioTools`.
+ If the folder name differs, Praat will not display the “AudioTools” menu.
+ Copy the renamed folder plugin_AudioTools into your Praat plugins directory.
 
-4. **Restart Praat.**
+4. **Restart Praat.** After restarting, you should see a new AudioTools menu in the main Praat window.
 
 ---
 
