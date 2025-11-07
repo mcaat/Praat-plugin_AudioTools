@@ -21,6 +21,16 @@
 
 form Vibrato Rate Modulation Effect
     comment This script creates vibrato with time-varying rate
+    comment ==============================================
+    optionmenu Preset 1
+        option Custom (use settings below)
+        option Subtle Natural Vibrato
+        option Classic Vocal Vibrato
+        option Wide Expressive Vibrato
+        option Fast Tremolo
+        option Slow Wavy Effect
+        option Extreme Modulation
+    comment ==============================================
     comment Delay parameters:
     positive base_delay_ms 5.0
     comment (base delay time in milliseconds)
@@ -37,6 +47,51 @@ form Vibrato Rate Modulation Effect
     positive scale_peak 0.99
     boolean play_after_processing 1
 endform
+
+# Apply preset values if not Custom
+if preset = 2
+    # Subtle Natural Vibrato
+    base_delay_ms = 4.0
+    modulation_depth = 0.08
+    base_rate_hz = 5.5
+    rate_sensitivity = 1.5
+    rate_modulation_hz = 0.5
+elsif preset = 3
+    # Classic Vocal Vibrato
+    base_delay_ms = 6.0
+    modulation_depth = 0.12
+    base_rate_hz = 5.8
+    rate_sensitivity = 2.0
+    rate_modulation_hz = 0.6
+elsif preset = 4
+    # Wide Expressive Vibrato
+    base_delay_ms = 8.0
+    modulation_depth = 0.18
+    base_rate_hz = 4.5
+    rate_sensitivity = 4.0
+    rate_modulation_hz = 0.7
+elsif preset = 5
+    # Fast Tremolo
+    base_delay_ms = 3.0
+    modulation_depth = 0.15
+    base_rate_hz = 8.0
+    rate_sensitivity = 5.0
+    rate_modulation_hz = 1.2
+elsif preset = 6
+    # Slow Wavy Effect
+    base_delay_ms = 10.0
+    modulation_depth = 0.20
+    base_rate_hz = 2.5
+    rate_sensitivity = 2.5
+    rate_modulation_hz = 0.4
+elsif preset = 7
+    # Extreme Modulation
+    base_delay_ms = 12.0
+    modulation_depth = 0.25
+    base_rate_hz = 6.0
+    rate_sensitivity = 6.0
+    rate_modulation_hz = 1.5
+endif
 
 # Check if a Sound is selected
 if not selected("Sound")
