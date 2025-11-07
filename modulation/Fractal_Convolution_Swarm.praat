@@ -21,22 +21,77 @@
 
 form Fractal Convolution Swarm
     comment This script applies multi-scale fractal convolution processing
+    comment ==============================================
+    optionmenu Preset 1
+        option Custom (use settings below)
+        option Subtle Texture
+        option Ambient Swarm
+        option Dense Cloud
+        option Granular Dispersion
+        option Extreme Fractal
+        option Gentle Shimmer
+    comment ==============================================
     comment Fractal parameters:
     natural fractal_depth 5
     comment (number of recursive depth levels)
     natural convolution_width 3
     comment (kernel half-width: processes from -width to +width)
     comment Scaling parameters:
-    positive kernel_size_divisor 10
-    comment (controls kernel size at each depth)
-    positive depth_offset 2
-    comment (offset for weight calculation)
-    positive amplitude_decay_rate 0.15
-    comment (amplitude reduction per depth level)
+    positive base_delay_ms 5.0
+    comment (base delay time in milliseconds)
+    positive depth_scale_factor 1.6
+    comment (delay multiplier per depth level)
+    positive mix_amount 0.3
+    comment (wet/dry mix per iteration, 0-1)
     comment Output options:
-    positive scale_peak 0.90
+    positive scale_peak 0.95
     boolean play_after_processing 1
 endform
+
+# Apply preset values if not Custom
+if preset = 2
+    # Subtle Texture
+    fractal_depth = 3
+    convolution_width = 2
+    base_delay_ms = 3.0
+    depth_scale_factor = 1.4
+    mix_amount = 0.2
+elsif preset = 3
+    # Ambient Swarm
+    fractal_depth = 5
+    convolution_width = 3
+    base_delay_ms = 5.0
+    depth_scale_factor = 1.6
+    mix_amount = 0.3
+elsif preset = 4
+    # Dense Cloud
+    fractal_depth = 6
+    convolution_width = 4
+    base_delay_ms = 7.0
+    depth_scale_factor = 1.8
+    mix_amount = 0.4
+elsif preset = 5
+    # Granular Dispersion
+    fractal_depth = 7
+    convolution_width = 5
+    base_delay_ms = 8.0
+    depth_scale_factor = 2.0
+    mix_amount = 0.45
+elsif preset = 6
+    # Extreme Fractal
+    fractal_depth = 8
+    convolution_width = 6
+    base_delay_ms = 10.0
+    depth_scale_factor = 2.2
+    mix_amount = 0.5
+elsif preset = 7
+    # Gentle Shimmer
+    fractal_depth = 4
+    convolution_width = 2
+    base_delay_ms = 2.5
+    depth_scale_factor = 1.3
+    mix_amount = 0.15
+endif
 
 # Check if a Sound is selected
 if not selected("Sound")
@@ -49,26 +104,33 @@ originalName$ = selected$("Sound")
 # Work on a copy
 Copy: originalName$ + "_fractal_swarm"
 
-# Get number of samples
-a = Get number of samples
+# Get sampling frequency
+sampling = Get sampling frequency
 
-# Apply fractal convolution processing
+# Calculate base delay in samples
+base_delay = round(base_delay_ms * sampling / 1000)
+
+# Apply fractal convolution processing with better algorithm
 for depth from 1 to fractal_depth
-    # Scale factor increases exponentially
-    scaleFactor = 2 ^ depth
-    kernelSize = round(a / (kernel_size_divisor * scaleFactor))
+    # Calculate delay for this depth level (exponentially increasing)
+    current_delay = round(base_delay * (depth_scale_factor ^ depth))
     
-    # Apply convolution kernel
+    # Weight decreases with depth but not too aggressively
+    depth_weight = 1 / sqrt(depth)
+    
+    # Apply convolution kernel at multiple offsets
     for kernel from -convolution_width to convolution_width
-        kernelWeight = 1 / (1 + abs(kernel))
-        kernelShift = kernel * kernelSize
-        
-        # Add weighted delayed/advanced versions
-        Formula: "self + self[max(1, min(ncol, col + 'kernelShift'))] * 'kernelWeight' / ('depth' + 'depth_offset')"
+        if kernel <> 0
+            # Calculate kernel weight (center-weighted)
+            kernel_weight = 1 / (1 + abs(kernel))
+            
+            # Calculate total shift
+            total_shift = current_delay + (kernel * round(current_delay * 0.3))
+            
+            # Mix in the delayed/advanced signal
+            Formula: "self * (1 - 'mix_amount' * 'kernel_weight' * 'depth_weight') + self[max(1, min(ncol, col + 'total_shift'))] * ('mix_amount' * 'kernel_weight' * 'depth_weight')"
+        endif
     endfor
-    
-    # Apply amplitude scaling for this depth
-    Formula: "self * (1 - 'depth' * 'amplitude_decay_rate')"
 endfor
 
 # Scale to peak
