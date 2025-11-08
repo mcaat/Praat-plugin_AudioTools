@@ -1,5 +1,5 @@
 # ============================================================
-# Praat AudioTools - Frequency Shifter (Pitch Warp).praat
+# Praat AudioTools - Frequency Shifter.praat
 # Author: Shai Cohen
 # Affiliation: Department of Music, Bar-Ilan University, Israel
 # Email: shai.cohen@biu.ac.il
