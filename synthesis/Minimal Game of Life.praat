@@ -120,5 +120,6 @@ endfor
 
 Create Sound from formula... minimal_life 1 0 duration sampling_frequency 'formula$'
 Scale peak... 0.9
+Play
 
 echo Minimal Game of Life complete!
