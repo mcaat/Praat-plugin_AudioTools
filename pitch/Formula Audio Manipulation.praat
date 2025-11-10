@@ -25,6 +25,17 @@
 # ===================================================================
 
 form Advanced Formula Audio Manipulation
+    comment === PRESET CONFIGURATIONS ===
+    optionmenu preset 1
+        option Manual (configure below)
+        option Gentle Modulation
+        option Complex Textures
+        option Chaotic Systems
+        option Rhythmic Pulsing
+        option Harmonic Richness
+        option Extreme Modulation
+        option Subtle Evolution
+    comment ─────────────────────────────────────
     comment === MODULATION PARAMETERS ===
     real Base_frequency 0.8
     real Modulation_depth 0.85
@@ -37,7 +48,77 @@ form Advanced Formula Audio Manipulation
     boolean Apply_ring_modulation 1
     real Ring_mod_frequency 120
     real Ring_mod_depth 0.6
+    comment === OUTPUT OPTIONS ===
+    boolean Play_result 1
+    boolean Keep_intermediate_objects 0
 endform
+
+# Apply presets
+if preset = 2    ; Gentle Modulation
+    base_frequency = 0.3
+    modulation_depth = 0.4
+    complexity_level = 2
+    apply_pitch_modulation = 1
+    pitch_mod_rate = 0.2
+    pitch_mod_depth = 0.2
+    apply_ring_modulation = 0
+elsif preset = 3    ; Complex Textures
+    base_frequency = 1.2
+    modulation_depth = 0.7
+    complexity_level = 3
+    apply_pitch_modulation = 1
+    pitch_mod_rate = 0.8
+    pitch_mod_depth = 0.3
+    apply_ring_modulation = 1
+    ring_mod_frequency = 80
+    ring_mod_depth = 0.4
+elsif preset = 4    ; Chaotic Systems
+    base_frequency = 2.5
+    modulation_depth = 0.9
+    complexity_level = 3
+    apply_pitch_modulation = 1
+    pitch_mod_rate = 1.5
+    pitch_mod_depth = 0.6
+    apply_ring_modulation = 1
+    ring_mod_frequency = 200
+    ring_mod_depth = 0.8
+elsif preset = 5    ; Rhythmic Pulsing
+    base_frequency = 4.0
+    modulation_depth = 0.6
+    complexity_level = 2
+    apply_pitch_modulation = 0
+    apply_ring_modulation = 1
+    ring_mod_frequency = 60
+    ring_mod_depth = 0.7
+elsif preset = 6    ; Harmonic Richness
+    base_frequency = 0.5
+    modulation_depth = 0.5
+    complexity_level = 3
+    apply_pitch_modulation = 1
+    pitch_mod_rate = 0.3
+    pitch_mod_depth = 0.4
+    apply_ring_modulation = 1
+    ring_mod_frequency = 150
+    ring_mod_depth = 0.3
+elsif preset = 7    ; Extreme Modulation
+    base_frequency = 3.0
+    modulation_depth = 1.0
+    complexity_level = 3
+    apply_pitch_modulation = 1
+    pitch_mod_rate = 2.0
+    pitch_mod_depth = 0.8
+    apply_ring_modulation = 1
+    ring_mod_frequency = 300
+    ring_mod_depth = 0.9
+elsif preset = 8    ; Subtle Evolution
+    base_frequency = 0.2
+    modulation_depth = 0.3
+    complexity_level = 1
+    apply_pitch_modulation = 1
+    pitch_mod_rate = 0.1
+    pitch_mod_depth = 0.15
+    apply_ring_modulation = 0
+endif
 
 # Get selected Sound
 sound = selected("Sound")
@@ -88,40 +169,59 @@ sound_mod = selected("Sound")
 Formula: "self * object[am_envelope, col]"
 
 # ===================================================================
-# PITCH MODULATION (optional)
+# PITCH MODULATION (optional) - WITH DENSE POINT SAMPLING
 # ===================================================================
 
 if apply_pitch_modulation
     selectObject: sound_mod
-    To Manipulation: 0.01, 75, 600
+    To Manipulation: 0.005, 75, 600
     manipulation = selected("Manipulation")
     
-    # Extract and remove original pitch tier
-    pitchtier_original = Extract pitch tier
-    Remove
-    
-    # Get base pitch
+    # Get base pitch with better analysis
     selectObject: sound_mod
-    To Pitch: 0, 75, 600
-    pitch = selected("Pitch")
-    f0_base = Get mean: 0, 0, "Hertz"
+    To Pitch: 0.005, 75, 600
+    pitch_obj = selected("Pitch")
+    f0_base = Get quantile: 0, 0, 0.5, "Hertz"
     
     if f0_base = undefined
         f0_base = 150
     endif
     
-    # Create modulated pitch tier
+    selectObject: pitch_obj
+    Remove
+    
+    # Create modulated pitch tier with DENSE points
     selectObject: manipulation
     Create PitchTier: sound_name$ + "_pitch_mod", 0, duration
     pitchtier_new = selected("PitchTier")
     
-    # Generate pitch modulation
-    n_points = floor(duration * 50)
-    for i from 1 to n_points
-        t = (i - 1) / 50
-        # Chaotic pitch modulation
-        mod_factor = 1 + pitch_mod_depth * sin(2*pi*pitch_mod_rate*t + 1.5*sin(2*pi*0.3*t))
+    # Generate pitch modulation with dense sampling
+    n_points = round(duration * 100)  
+    # Much denser than original 50
+    if n_points < 200
+        n_points = 200
+    endif
+    if n_points > 2000
+        n_points = 2000
+    endif
+    
+    for i from 0 to n_points-1
+        t = i * duration / n_points
+        
+        # Complex pitch modulation with multiple layers
+        mod1 = sin(2*pi*pitch_mod_rate*t)
+        mod2 = 0.5 * sin(2*pi*pitch_mod_rate*1.7*t + 0.5)
+        mod3 = 0.3 * sin(2*pi*pitch_mod_rate*0.6*t + 1.2)
+        
+        mod_factor = 1 + pitch_mod_depth * (mod1 + mod2 + mod3) / 1.8
         f0 = f0_base * mod_factor
+        
+        # Clamp to reasonable range
+        if f0 < 75
+            f0 = 75
+        elsif f0 > 600
+            f0 = 600
+        endif
         
         selectObject: pitchtier_new
         Add point: t, f0
@@ -129,9 +229,8 @@ if apply_pitch_modulation
     
     # Replace pitch tier
     selectObject: manipulation
-    plus pitchtier_new
+    plusObject: pitchtier_new
     Replace pitch tier
-    removeObject: pitchtier_new
     
     # Resynthesize
     selectObject: manipulation
@@ -139,7 +238,11 @@ if apply_pitch_modulation
     Rename: sound_name$ + "_pitch_mod"
     
     # Clean up
-    removeObject: sound_mod, pitch, manipulation
+    if not keep_intermediate_objects
+        removeObject: sound_mod, manipulation, pitchtier_new
+    else
+        removeObject: sound_mod
+    endif
     sound_mod = sound_repitched
 endif
 
@@ -158,21 +261,33 @@ if apply_ring_modulation
     ring_formula$ = "self * (1 - 'ring_mod_depth' + 'ring_mod_depth' * object[carrier, col])"
     Formula: ring_formula$
     
-    removeObject: carrier
+    if not keep_intermediate_objects
+        removeObject: carrier
+    endif
 endif
-Play
 
 # ===================================================================
-# CLEANUP & SELECT OUTPUT
+# FINAL PROCESSING
 # ===================================================================
 
 selectObject: sound_mod
 Rename: sound_name$ + "_formula_manipulated"
 Scale peak: 0.95
 
-removeObject: am_envelope
+if not keep_intermediate_objects
+    removeObject: am_envelope
+endif
+
+if play_result
+    Play
+endif
+
+# ===================================================================
+# REPORT RESULTS
+# ===================================================================
 
 appendInfoLine: "✓ Advanced Formula Manipulation complete!"
+appendInfoLine: "  Preset: ", preset
 appendInfoLine: "  Complexity level: ", complexity_level
 appendInfoLine: "  Base modulation frequency: ", fixed$(base_frequency, 2), " Hz"
 appendInfoLine: "  Modulation depth: ", fixed$(modulation_depth, 2)

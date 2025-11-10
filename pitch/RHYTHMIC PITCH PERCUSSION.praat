@@ -21,6 +21,13 @@
 
 form Rhythmic Pitch Percussion
     comment This script creates percussive pitch hits with polyrhythms
+    optionmenu preset 1
+        option Custom
+        option Techno_Kick
+        option Trap_Hi_Hat
+        option Dubstep_Wobble
+        option Breakbeat
+        option Minimal_Pulse
     sentence rhythm_pattern 1_0_1_1_0_1_0_1_1_0_0_1
     comment (1=hit, 0=rest, underscore-separated)
     positive hit_strength 25
@@ -39,6 +46,48 @@ if not selected("Sound")
     exitScript: "Please select a Sound object first."
 endif
 
+# Store original sound
+originalSound = selected("Sound")
+originalName$ = selected$("Sound")
+
+# Apply presets with drastically different characteristics
+if preset = 2
+    # Techno Kick - MASSIVE downward pitch swoops
+    rhythm_pattern$ = "1_0_0_0_1_0_0_0_1_0_0_0_1_0_0_0"
+    hit_strength = 150
+    decay_rate = 15
+    polyrhythm_factor = 1
+    ghost_hits = 0
+elsif preset = 3
+    # Trap Hi-Hat - RAPID flickering, ultra-fast decay
+    rhythm_pattern$ = "1_1_1_1_0_1_1_1_1_1_0_1_1_1_1_0"
+    hit_strength = 8
+    decay_rate = 40
+    polyrhythm_factor = 8
+    ghost_hits = 2.0
+elsif preset = 4
+    # Dubstep Wobble - Heavy modulation with sparse pattern
+    rhythm_pattern$ = "1_0_1_0_1_0_1_0_1_0_1_0_1_0_1_0"
+    hit_strength = 120
+    decay_rate = 2
+    polyrhythm_factor = 11
+    ghost_hits = 0.8
+elsif preset = 5
+    # Breakbeat - Sharp attacks with complex syncopation
+    rhythm_pattern$ = "1_0_0_1_0_1_0_0_1_0_1_0_1_0_0_1"
+    hit_strength = 100
+    decay_rate = 20
+    polyrhythm_factor = 7
+    ghost_hits = 1.2
+elsif preset = 6
+    # Minimal Pulse - Deep BOOMS, ultra-slow decay
+    rhythm_pattern$ = "1_0_0_0_0_0_0_0_0_0_0_0_0_0_0_0"
+    hit_strength = 180
+    decay_rate = 0.5
+    polyrhythm_factor = 1
+    ghost_hits = 0
+endif
+
 # Parse rhythm pattern
 rhythm$ = rhythm_pattern$
 rhythm$ = replace$(rhythm$, "_", " ", 0)
@@ -55,10 +104,14 @@ until space_pos <= 1
 
 orig_sr = Get sampling frequency
 Copy... rhythm_tmp
+tmpSound = selected("Sound")
 To Manipulation: timestep, floor, ceil
+tmpManipulation = selected("Manipulation")
 Extract pitch tier
 Rename... rhythm_pitch
-select PitchTier rhythm_pitch
+tmpPitchTier = selected("PitchTier")
+
+select tmpPitchTier
 Remove points between... 0 0
 xmin = Get start time
 xmax = Get end time
@@ -112,20 +165,23 @@ for i from 0 to npoints-1
     Add point... t ratio
 endfor
 
-select Manipulation rhythm_tmp
-plus PitchTier rhythm_pitch
+select tmpManipulation
+plus tmpPitchTier
 Replace pitch tier
-select Manipulation rhythm_tmp
+select tmpManipulation
 Get resynthesis (overlap-add)
 Rename... rhythm_result
+beforeResample = selected("Sound")
 Resample... 44100 50
+rhythm_result_final = selected("Sound")
 
 if play_after_processing
     Play
 endif
 
-if not keep_intermediate_objects
-    select Manipulation rhythm_tmp
-    plus PitchTier rhythm_pitch
-    Remove
-endif
+# Cleanup: Remove all intermediate objects, keep original and final result
+select tmpManipulation
+plus tmpPitchTier
+plus tmpSound
+plus beforeResample
+Remove
