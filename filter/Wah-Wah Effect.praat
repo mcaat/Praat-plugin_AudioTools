@@ -145,8 +145,14 @@ select Sound 'soundName$'_wahwah_advanced
 Scale peak: 0.99
 Play
 
-# Cleanup
-select all
-minus Sound 'soundName$'
-minus Sound 'soundName$'_wahwah_advanced
+# Cleanup - remove all intermediate objects
+select Sound 'soundName$'_mono
+for i from 1 to 'Number_of_segments'
+    plus Sound segment_'i'
+    plus Sound segment_'i'_copy
+    plus Sound left_seg_'i'
+    plus Sound right_seg_'i'
+endfor
+plus Sound left_channel
+plus Sound right_channel
 Remove
