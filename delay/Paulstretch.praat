@@ -187,12 +187,12 @@ for iframe from 0 to n_frames - 1
         t_out = iframe * hop_out
         out_start_sample = round(t_out * fs) + 1
         
+        selectObject: output_sound
+        out_n_samples = Get number of samples
+        
         # Add each sample to output
         for i_sample from 1 to proc_n_samples
             out_sample_index = out_start_sample + i_sample - 1
-            
-            selectObject: output_sound
-            out_n_samples = Get number of samples
             
             if out_sample_index >= 1 and out_sample_index <= out_n_samples
                 # Get value from processed sound
