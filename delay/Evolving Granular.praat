@@ -19,13 +19,6 @@
 #   https://github.com/ShaiCohen-ops/Praat-plugin_AudioTools
 # ============================================================
 
-# ===================================================================
-#  Evolving Granular Audio Manipulation
-#  Fragments source audio into grains with evolving parameters
-#  WARNING: This script uses intensive sample-by-sample processing
-#  Lower density values for faster processing
-# ===================================================================
-
 form Evolving Granular Manipulation
     comment === GRAIN PARAMETERS ===
     real Initial_density 10.0
@@ -42,6 +35,9 @@ form Evolving Granular Manipulation
     real Position_randomness 0.3
     real Pitch_randomness 2.0
     real Amplitude_randomness 0.2
+    comment === PERFORMANCE OPTIONS ===
+    boolean Enable_pitch_shifting 1
+    comment (Disable pitch for faster preview)
     comment NOTE: Higher density = slower processing
     comment Recommended: 5-15 grains/sec for testing
 endform
@@ -49,6 +45,7 @@ endform
 # Get selected Sound
 sound = selected("Sound")
 sound_name$ = selected$("Sound")
+selectObject: sound
 duration = Get total duration
 sampling_rate = Get sampling frequency
 n_samples = Get number of samples
@@ -56,6 +53,7 @@ n_channels = Get number of channels
 
 # Convert to mono if stereo
 if n_channels > 1
+    selectObject: sound
     Convert to mono
     sound_mono = selected("Sound")
     sound = sound_mono
@@ -64,6 +62,7 @@ endif
 writeInfoLine: "Creating Evolving Granular Manipulation..."
 appendInfoLine: "  Duration: ", fixed$(duration, 2), " s"
 appendInfoLine: "  Evolution type: ", evolution_type$
+appendInfoLine: "  Pitch shifting: ", if enable_pitch_shifting then "ON" else "OFF (fast mode)" fi
 
 # Calculate total number of grains
 avg_density = (initial_density + final_density) / 2
@@ -71,14 +70,24 @@ total_grains = round(avg_density * duration)
 
 appendInfoLine: "  Total grains: ", total_grains
 appendInfoLine: ""
-appendInfoLine: "  WARNING: This may take several minutes!"
-appendInfoLine: "  Processing uses sample-by-sample operations."
+appendInfoLine: "  OPTIMIZED v3 - Pre-computed windows, optional pitch"
 appendInfoLine: "  Progress updates every 100 grains..."
 appendInfoLine: ""
+
+# Pre-compute maximum Hann window we'll need
+max_grain_dur = grain_duration_max
+max_grain_samples = ceiling(max_grain_dur * sampling_rate) + 100
+hann_window# = zero#(max_grain_samples)
+for i to max_grain_samples
+    hann_window#[i] = 0.5 - 0.5 * cos(2 * pi * (i-1) / (max_grain_samples-1))
+endfor
 
 # Create output sound (silence)
 Create Sound from formula: sound_name$ + "_granular", 1, 0, duration, sampling_rate, "0"
 output_sound = selected("Sound")
+
+# Pre-allocate output array for faster mixing
+output_samples# = zero#(n_samples)
 
 # ===================================================================
 # GRAIN GENERATION
@@ -91,6 +100,32 @@ elsif evolution_type = 2
 else
     call StatisticalShift
 endif
+
+# ===================================================================
+# WRITE FINAL OUTPUT FROM ARRAY
+# ===================================================================
+
+appendInfoLine: "Writing final output..."
+selectObject: output_sound
+
+# Convert to Matrix for fast bulk write
+Down to Matrix
+output_matrix = selected("Matrix")
+
+# Write all samples from array to matrix
+selectObject: output_matrix
+for i to n_samples
+    Set value: 1, i, output_samples#[i]
+endfor
+
+# Convert back to Sound
+selectObject: output_matrix
+To Sound (slice): 1
+final_sound = selected("Sound")
+
+# Clean up
+removeObject: output_sound, output_matrix
+output_sound = final_sound
 
 # ===================================================================
 # FINALIZE
@@ -250,15 +285,14 @@ procedure AddGrain source_pos grain_start grain_dur pitch_shift amp_factor
     Extract part: source_pos, source_pos + grain_dur, "rectangular", 1, "no"
     grain_extract = selected("Sound")
     
-    # Apply pitch shift if needed and grain is long enough
-    # Minimum grain duration for pitch analysis: ~3 periods at 80 Hz = 0.0375s
+    # Apply pitch shift if enabled and needed
     min_grain_for_pitch = 0.04
-    if abs(pitch_shift) > 0.1 and grain_dur >= min_grain_for_pitch
-        pitch_factor = 2^(pitch_shift / 12)
-        # Calculate appropriate pitch floor (must be >= 77.64 Hz)
-        min_pitch_floor = 80
-        max_pitch_ceiling = 600
-        Lengthen (overlap-add): min_pitch_floor, max_pitch_ceiling, pitch_factor
+    pitch_factor = 2^(pitch_shift / 12)
+    
+    # Only pitch shift if: (1) enabled, (2) grain long enough, (3) shift is audible
+    if enable_pitch_shifting and grain_dur >= min_grain_for_pitch and abs(pitch_factor - 1) > 0.02
+        selectObject: grain_extract
+        Lengthen (overlap-add): 80, 600, pitch_factor
         grain_shifted = selected("Sound")
         removeObject: grain_extract
         grain_extract = grain_shifted
@@ -267,34 +301,56 @@ procedure AddGrain source_pos grain_start grain_dur pitch_shift amp_factor
         grain_dur = Get total duration
     endif
     
-    # Apply amplitude envelope (Hann window)
-    selectObject: grain_extract
-    Formula: "self * (1 - cos(2*pi*x/" + string$(grain_dur) + "))/2 * " + string$(amp_factor)
-    
-    # Mix grain into output sample by sample
+    # Get grain info
     selectObject: grain_extract
     grain_n_samples = Get number of samples
     
+    # Apply pre-computed Hann window and amplitude factor
+    # This is much faster than Formula with trig
+    selectObject: grain_extract
     for i to grain_n_samples
-        grain_time = (i - 1) / sampling_rate
-        output_time = grain_start + grain_time
-        
-        if output_time < duration
-            selectObject: grain_extract
-            grain_value = Get value at sample number: 1, i
-            
-            selectObject: output_sound
-            output_sample = round(output_time * sampling_rate) + 1
-            
-            if output_sample > 0 and output_sample <= n_samples
-                current_value = Get value at sample number: 1, output_sample
-                new_value = current_value + grain_value
-                Set value at sample number: 1, output_sample, new_value
-            endif
+        window_index = round((i-1) / (grain_n_samples-1) * (max_grain_samples-1)) + 1
+        if window_index > max_grain_samples
+            window_index = max_grain_samples
         endif
+        current_value = Get value at sample number: 1, i
+        new_value = current_value * hann_window#[window_index] * amp_factor
+        Set value at sample number: 1, i, new_value
+    endfor
+    
+    # Convert to Matrix for faster bulk read
+    selectObject: grain_extract
+    Down to Matrix
+    grain_matrix = selected("Matrix")
+    
+    # Calculate starting sample in output
+    start_sample = round(grain_start * sampling_rate) + 1
+    
+    # Determine valid range to avoid per-sample bounds checking
+    first_grain_sample = 1
+    last_grain_sample = grain_n_samples
+    
+    if start_sample < 1
+        first_grain_sample = 2 - start_sample
+        start_sample = 1
+    endif
+    
+    end_sample = start_sample + grain_n_samples - 1
+    if end_sample > n_samples
+        last_grain_sample = grain_n_samples - (end_sample - n_samples)
+        end_sample = n_samples
+    endif
+    
+    # Bulk read from matrix (selectObject OUTSIDE loop)
+    selectObject: grain_matrix
+    output_idx = start_sample
+    for i from first_grain_sample to last_grain_sample
+        grain_value = Get value in cell: 1, i
+        output_samples#[output_idx] = output_samples#[output_idx] + grain_value
+        output_idx = output_idx + 1
     endfor
     
     # Clean up
-    removeObject: grain_extract
-    selectObject: output_sound
+    removeObject: grain_matrix, grain_extract
 endproc
+Play
