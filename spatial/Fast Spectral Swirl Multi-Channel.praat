@@ -21,10 +21,10 @@
 
 # Fast Spectral Swirl Multi-Channel Script
 # Creates 8-channel output with spectral swirl effect
-
 form Spectral Swirl Multi-Channel
     positive Base_depth 50
     positive Depth_increment 25
+    positive Fade_duration 0.01
     comment Creates 8-channel sound with different swirl parameters per channel
 endform
 
@@ -46,7 +46,6 @@ if numberOfLeftover > 0
 endif
 
 select sound
-
 writeInfoLine: "Starting spectral swirl processing..."
 appendInfoLine: "Original: ", sound$
 appendInfoLine: "Duration: ", fixed$(original_duration, 3), " seconds"
@@ -86,7 +85,6 @@ select Sound swirl_1
 for i from 2 to 8
     plus Sound swirl_'i'
 endfor
-
 result = Combine to stereo
 Rename: "vocal2_swirl_8ch"
 
@@ -104,6 +102,11 @@ for i from 1 to 8
     Remove
 endfor
 
+# Apply fade in and fade out
+select result
+appendInfoLine: "Applying fade in/out (", fade_duration, " seconds each)..."
+Formula: "self * if x < 'fade_duration' then x / 'fade_duration' else if x > 'final_duration' - 'fade_duration' then ('final_duration' - x) / 'fade_duration' else 1 fi fi"
+
 # Final scaling
 select result
 Scale peak: 0.99
@@ -118,7 +121,6 @@ if numberOfSelected > 0
     Remove
 endif
 
-
 # Final selection and info
 select result
 final_channels = Get number of channels
@@ -131,6 +133,7 @@ appendInfoLine: "Result details:"
 appendInfoLine: "  Channels: ", final_channels
 appendInfoLine: "  Duration: ", fixed$(final_duration, 3), " seconds"
 appendInfoLine: "  Sample rate: ", sampling_rate, " Hz"
+appendInfoLine: "  Fade: ", fade_duration, " sec in/out"
 appendInfoLine: ""
 appendInfoLine: "Channel parameters:"
 for i from 1 to 8
