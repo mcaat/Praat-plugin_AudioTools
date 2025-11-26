@@ -20,15 +20,19 @@
 # ============================================================
 
 # ===========================================================
-# Random Duration-Stretched Slices -> One Channel per Slice
-# CH1 = Original Left (unchanged)
-# CH2..CH(N+1) = Duration-stretched slices (one per channel)
+# Random Duration-Stretched Slices -> Multi-channel output
+# Optimized v2.1: Fixed Selection Error & Hardened Logic
 # ===========================================================
 
 form Random Duration-Stretched Slices (Multi-channel output)
     positive number_of_segments 4
     real min_duration 0.5
     real max_duration 2.0
+    
+    comment ---- Output Options ----
+    # Default is unchecked (NO)
+    boolean Mix_original_channel_1 0
+    
     comment ---- Duration manipulation parameters ----
     optionmenu Preset: 1
         option "Normal (1.0)"
@@ -83,7 +87,6 @@ endif
 # --------------------------------------------
 # Calculate padding needed
 # --------------------------------------------
-# Maximum stretched duration (when duration_factor < 1, segments get longer)
 max_stretched_duration = max_duration / duration_factor
 padding_duration = max_stretched_duration
 padded_duration = total_duration + padding_duration
@@ -91,17 +94,16 @@ padded_duration = total_duration + padding_duration
 # --------------------------------------------
 # Prepare channel 1 (LEFT original) and the slice source
 # --------------------------------------------
+writeInfoLine: "Preparing channels..."
+
 if nchan = 2
     # CH1 = original LEFT
     selectObject: orig_id
     left_id = Extract one channel: 1
-    tmpName$ = orig_name$ + "_CH1_LEFT_orig"
-    Rename: tmpName$
-    left_id = selected("Sound")
+    Rename: orig_name$ + "_CH1_LEFT_orig"
     
-    # Pad left channel to padded_duration
-    Create Sound from formula: "tmp_pad_left", 1, 0, padding_duration, fs, "0"
-    pad_left = selected("Sound")
+    # Pad left channel
+    pad_left = Create Sound from formula: "pad", 1, 0, padding_duration, fs, "0"
     selectObject: left_id
     plusObject: pad_left
     left_padded = Concatenate
@@ -110,20 +112,15 @@ if nchan = 2
 
     selectObject: orig_id
     right_src_id = Extract one channel: 2
-    tmpName$ = orig_name$ + "_sliceSource_RIGHT"
-    Rename: tmpName$
-    right_src_id = selected("Sound")
+    Rename: orig_name$ + "_sliceSource_RIGHT"
 else
     # Mono input: duplicate for left + slice source
     selectObject: orig_id
-    Copy...
-    tmpName$ = orig_name$ + "_CH1_LEFT_orig"
-    Rename: tmpName$
+    Copy: orig_name$ + "_CH1_LEFT_orig"
     left_id = selected("Sound")
     
-    # Pad left channel to padded_duration
-    Create Sound from formula: "tmp_pad_left_mono", 1, 0, padding_duration, fs, "0"
-    pad_left_mono = selected("Sound")
+    # Pad left channel
+    pad_left_mono = Create Sound from formula: "pad", 1, 0, padding_duration, fs, "0"
     selectObject: left_id
     plusObject: pad_left_mono
     left_padded = Concatenate
@@ -131,16 +128,14 @@ else
     left_id = left_padded
 
     selectObject: orig_id
-    Copy...
-    tmpName$ = orig_name$ + "_sliceSource_MONO"
-    Rename: tmpName$
+    Copy: orig_name$ + "_sliceSource_MONO"
     right_src_id = selected("Sound")
 endif
 
 # --------------------------------------------
-# Procedure: Duration stretch using Manipulation
+# Procedure: Duration stretch (PSOLA)
 # --------------------------------------------
-procedure DurationStretchOnSelected: .duration_factor, .outname$
+procedure DurationStretchOnSelected: .dur_factor
     .local_in_id = selected("Sound")
     selectObject: .local_in_id
     .dur = Get total duration
@@ -148,20 +143,21 @@ procedure DurationStretchOnSelected: .duration_factor, .outname$
     # Create manipulation object
     .manipulation = To Manipulation: 0.01, 75, 600
     
-    # Create duration tier with user-specified factor
+    # Create duration tier
     .durationTier = Create DurationTier: "duration", 0, .dur
-    Add point: 0, .duration_factor
-    Add point: .dur, .duration_factor
+    Add point: 0, .dur_factor
+    Add point: .dur, .dur_factor
     
     # Replace duration tier in manipulation
     selectObject: .manipulation
     plusObject: .durationTier
     Replace duration tier
     
-    # Resynthesize using overlap-add method
+    # Resynthesize
     selectObject: .manipulation
     .resynthesized = Get resynthesis (overlap-add)
-    Rename: .outname$
+    
+    # Normalize result
     Scale peak: 0.99
     
     # Clean up intermediate objects
@@ -171,107 +167,114 @@ procedure DurationStretchOnSelected: .duration_factor, .outname$
 endproc
 
 # --------------------------------------------
-# Build one full-length channel per slice (CH2..CH(N+1))
-# Each channel has silence except the duration-stretched slice at its position
+# Build one full-length channel per slice
 # --------------------------------------------
 chan_ids# = zero# (number_of_segments)
 
+# CRITICAL FIX: Get the duration of the source ONCE before the loop
+selectObject: right_src_id
+total_src_dur = Get total duration
+
 for i to number_of_segments
+    # Calculate random window based on the pre-calculated duration
     seg_len = randomUniform(min_duration, max_duration)
-    max_start = total_duration - seg_len
+    max_start = total_src_dur - seg_len
     win_start = randomUniform(0, max_start)
     win_end   = win_start + seg_len
     
-    writeInfoLine: "Slice ", i, ": extracting from ", fixed$(win_start, 3), " to ", fixed$(win_end, 3), " (duration: ", fixed$(seg_len, 3), ")"
+    writeInfoLine: "Slice ", i, ": processing ", fixed$(seg_len, 3), "s segment..."
 
-    # Extract raw (mono) segment from slice source
+    # 1. Extract raw segment
     selectObject: right_src_id
     seg_id = Extract part: win_start, win_end, "rectangular", 1, "no"
-    tmpName$ = orig_name$ + "_rawseg_" + string$(i)
-    Rename: tmpName$
-    seg_id = selected("Sound")
-
-    # Duration stretch the segment
-    selectObject: seg_id
-    stretchName$ = orig_name$ + "_stretched_" + string$(i)
-    @DurationStretchOnSelected: duration_factor, stretchName$
-    stretched_id = selected("Sound")
     
-    # Get the stretched duration
+    # 2. Duration Stretch
+    @DurationStretchOnSelected: duration_factor
+    stretched_id = selected("Sound")
+    Rename: "stretched_" + string$(i)
+    
+    # 3. Calculate Placement
     selectObject: stretched_id
     stretched_dur = Get total duration
     
-    # Calculate center of original segment
     original_center = win_start + (seg_len / 2)
+    target_start = original_center - (stretched_dur / 2)
     
-    # Calculate start position so stretched segment is centered on original position
-    stretched_start = original_center - (stretched_dur / 2)
-    
-    # Ensure we don't go negative
-    if stretched_start < 0
-        stretched_start = 0
+    if target_start < 0
+        target_start = 0
     endif
     
-    writeInfoLine: "Slice ", i, ": stretched duration = ", fixed$(stretched_dur, 3), ", placing at ", fixed$(stretched_start, 3)
-
-    # Create full-length channel with silence
-    Create Sound from formula: "channel_" + string$(i), 1, 0, padded_duration, fs, "0"
+    # 4. Create Channel and Place Audio (FAST METHOD)
+    Create Sound from formula: "CH" + string$(i+1), 1, 0, padded_duration, fs, "0"
     channel_id = selected("Sound")
     
-    # Copy samples from stretched segment into the channel at the correct position
+    # Shift stretched piece to target time
     selectObject: stretched_id
-    n_samples_stretched = Get number of samples
-    start_sample = round(stretched_start * fs) + 1
+    Shift times to: "start time", target_start
     
-    for isamp from 1 to n_samples_stretched
-        selectObject: stretched_id
-        val = Get value at sample number: 1, isamp
-        
-        target_sample = start_sample + isamp - 1
-        selectObject: channel_id
-        n_samples_ch = Get number of samples
-        
-        if target_sample >= 1 and target_sample <= n_samples_ch
-            Set value at sample number: 1, target_sample, val
-        endif
-    endfor
+    # Prepare strings for formula
+    str_id$ = string$(stretched_id)
+    t_start$ = fixed$(target_start, 6)
+    t_end$ = fixed$(target_start + stretched_dur, 6)
     
+    # Inject into channel using Formula (Instant)
     selectObject: channel_id
-    tmpName$ = orig_name$ + "_CH" + string$(i+1) + "_slice"
-    Rename: tmpName$
-    chan_ids#[i] = selected("Sound")
-
-    # cleanup per-iteration objects
+    Formula: "if x >= " + t_start$ + " and x <= " + t_end$ + " then self + object(" + str_id$ + ", x) else self fi"
+    
+    chan_ids#[i] = channel_id
+    
+    # Cleanup per-iteration objects
     removeObject: seg_id, stretched_id
 endfor
 
 # --------------------------------------------
-# Combine all channels into a (1 + N)-channel Sound
-# CH1 = left original; CH2..CH(N+1) = one slice per channel
+# Combine (Fixed for TRUE Multi-channel)
 # --------------------------------------------
-selectObject: left_id
-for i to number_of_segments
-    plusObject: chan_ids#[i]
+appendInfoLine: "Combining channels..."
+
+# 1. Determine Output Channels
+out_chans = number_of_segments
+if mix_original_channel_1
+    out_chans = out_chans + 1
+endif
+
+# 2. Create Master Sound container
+Create Sound from formula: "MultiChannel_Output", out_chans, 0, padded_duration, fs, "0"
+master_id = selected("Sound")
+
+# 3. Fill channels loop
+for i_ch from 1 to out_chans
+    selectObject: master_id
+    
+    src_id = 0
+    
+    if mix_original_channel_1
+        # If mixing: Ch1 is Left, Ch2 is Slice 1, etc.
+        if i_ch = 1
+            src_id = left_id
+        else
+            src_id = chan_ids#[i_ch - 1]
+        endif
+    else
+        # If NOT mixing: Ch1 is Slice 1, Ch2 is Slice 2, etc.
+        src_id = chan_ids#[i_ch]
+    endif
+    
+    # Use Vectorized Copy
+    src_str$ = string$(src_id)
+    Formula: "if row = " + string$(i_ch) + " then object(" + src_str$ + ", x) else self fi"
 endfor
 
-# Multichannel combine
-Combine to stereo
-tmpName$ = orig_name$ + "_LEFT_plus_" + string$(number_of_segments) + "DurStretch_MULTICH"
-Rename: tmpName$
-
-# Optional: scale peak across all channels
+# Finalize
+selectObject: master_id
+Rename: orig_name$ + "_MultiChannel_DurStretch_" + string$(out_chans) + "ch"
 Scale peak: 0.99
-Play
 
-# Store the result ID
-result_id = selected("Sound")
-
-# Cleanup temporary objects (keep original + result)
+# Cleanup
 removeObject: left_id, right_src_id
 for i to number_of_segments
     removeObject: chan_ids#[i]
 endfor
 
-# Select both original and result for user
-selectObject: orig_id
-plusObject: result_id
+appendInfoLine: "Done!"
+Play
