@@ -19,139 +19,186 @@
 #   https://github.com/ShaiCohen-ops/Praat-plugin_AudioTools
 # ============================================================
 
-form Noise Vocoder
-    comment This script creates a noise vocoder effect
-    comment Presets:
-    optionmenu preset: 1
-        option Default
-        option More Bands
-        option Wider Frequency Range
-        option Stronger Noise
-        option Smoother Filter
-    comment Vocoder band parameters:
-    natural number_of_bands 16
-    positive lower_frequency_limit 50
-    positive upper_frequency_limit 11000
-    comment Intensity extraction:
-    positive minimum_pitch 100
-    positive time_step 0.1
-    comment Filter parameters:
-    positive filter_smoothing 50
-    positive filter_edge_buffer 25
-    comment (Hz to trim from band edges for smoothing)
-    comment Noise generation:
-    positive noise_amplitude 0.1
-    comment Output options:
-    boolean play_after_processing 1
-    boolean keep_intermediate_objects 0
+# Poly-Carrier Vocoder (v4.0 - Speed Optimized)
+# Optimization: Downsampling reduces Filter Bank load by ~70%.
+# Feature: Extracts Pitch from original source for accuracy, processes at low rate for speed.
+
+form Poly-Carrier Vocoder (Fast)
+    comment --- Performance ---
+    choice processing_quality 2
+        button Hi-Fi (Original Rate - Slow)
+        button Vintage (16000 Hz - Fast)
+        button Lo-Fi (8000 Hz - Super Fast)
+
+    comment --- Vocoder Style ---
+    optionmenu carrier_type: 2
+        option 1. Noise (Whisper)
+        option 2. Robot Drone (Sawtooth)
+        option 3. Pitch-Tracking (Pulse)
+    
+    positive robot_pitch_hz 100
+    
+    comment --- Bands ---
+    natural number_of_bands 20
+    positive lower_freq_limit 50
+    positive upper_freq_limit 7500
+    
+    comment --- Envelope ---
+    positive envelope_smoothness_hz 100
+    
+    comment --- Output ---
+    boolean play_after 1
 endform
 
-# Apply preset values
-if preset = 2 ; More Bands
-    number_of_bands = 24
-elif preset = 3 ; Wider Frequency Range
-    lower_frequency_limit = 20
-    upper_frequency_limit = 15000
-elif preset = 4 ; Stronger Noise
-    noise_amplitude = 0.2
-elif preset = 5 ; Smoother Filter
-    filter_smoothing = 100
+# --- SETUP ---
+if numberOfSelected("Sound") <> 1
+    exitScript: "Please select exactly one Sound object."
 endif
 
-# Check if a Sound is selected
-if not selected("Sound")
-    exitScript: "Please select a Sound object first."
+orig_id = selected("Sound")
+orig_name$ = selected$("Sound")
+orig_sr = Get sampling frequency
+n_channels = Get number of channels
+
+# --- 1. PRE-CALCULATE PITCH (If needed) ---
+# We do this BEFORE downsampling to get the most accurate pitch detection
+if carrier_type = 3
+    selectObject: orig_id
+    # Pitch detection needs mono
+    if n_channels > 1
+        tmp_mono = Convert to mono
+        selectObject: tmp_mono
+    endif
+    
+    pitch_id = To Pitch: 0.0, 75, 600
+    pp_id = To PointProcess
+    
+    if n_channels > 1
+        removeObject: tmp_mono
+    endif
 endif
 
-# Get the source sound
-s1 = selected("Sound", 1)
-s1$ = selected$("Sound", 1)
-t = Get total duration
+# --- 2. PREPARE INPUT & DOWNSAMPLE ---
+selectObject: orig_id
+if n_channels > 1
+    input_id = Convert to mono
+else
+    input_id = Copy: "input"
+endif
 
-# Calculate sampling rate
-sr = 2 * upper_frequency_limit + 1000
+# Apply Optimization
+target_sr = orig_sr
+if processing_quality = 2
+    target_sr = 16000
+elsif processing_quality = 3
+    target_sr = 8000
+endif
 
-# Clear info window
-clearinfo
+if target_sr < orig_sr
+    resampled_id = Resample: target_sr, 50
+    removeObject: input_id
+    input_id = resampled_id
+endif
 
-# Convert frequency limits to Bark scale
-blowerLim = hertzToBark(lower_frequency_limit)
-bupperLim = hertzToBark(upper_frequency_limit)
-step = (bupperLim - blowerLim) / number_of_bands
+# Update working variables
+selectObject: input_id
+work_sr = Get sampling frequency
+dur = Get total duration
 
-# Process each frequency band
+# Output Buffer
+output_id = Create Sound from formula: "Vocoder_Out", 1, 0, dur, work_sr, "0"
+
+# --- 3. GENERATE CARRIER (At Working Rate) ---
+if carrier_type = 1
+    # NOISE
+    Create Sound from formula: "Carrier", 1, 0, dur, work_sr, "randomGauss(0, 0.2)"
+    carrier_id = selected("Sound")
+
+elsif carrier_type = 2
+    # ROBOT SAWTOOTH
+    s_pitch$ = string$(robot_pitch_hz)
+    Create Sound from formula: "Carrier", 1, 0, dur, work_sr, "0.2 * 2 * (x * " + s_pitch$ + " - floor(0.5 + x * " + s_pitch$ + "))"
+    carrier_id = selected("Sound")
+
+elsif carrier_type = 3
+    # PITCH PULSE
+    selectObject: pp_id
+    # We generate the sound using the Pulse object we created earlier
+    # but specifically at the NEW working sample rate
+    To Sound (pulse train): work_sr, 1, 0.05, 2000
+    Scale peak: 0.2
+    Rename: "Carrier"
+    carrier_id = selected("Sound")
+    removeObject: pitch_id, pp_id
+endif
+
+# --- BARK SCALE CALCS ---
+b_low = hertzToBark(lower_freq_limit)
+b_high = hertzToBark(upper_freq_limit)
+step = (b_high - b_low) / number_of_bands
+filter_smoothing_hz = 50
+
+writeInfoLine: "Vocoder Running at ", work_sr, " Hz..."
+
+# --- 4. MAIN BAND LOOP ---
 for i from 1 to number_of_bands
-    # Add previous bands if not first iteration
-    if i > 1
-        j = i - 1
-        select Sound band'j'
-        Rename: "previous"
+    # Frequency Calcs
+    b_upper = b_low + i * step
+    b_lower = b_upper - step
+    f_low = barkToHertz(b_lower)
+    f_high = barkToHertz(b_upper)
+    
+    # A. SOURCE (Modulator)
+    selectObject: input_id
+    src_band_id = Filter (pass Hann band): f_low, f_high, filter_smoothing_hz
+    
+    # B. ENVELOPE (Fast RMS)
+    Formula: "self * self"
+    # Smoothing filter
+    Filter (pass Hann band): 0, envelope_smoothness_hz, 20
+    env_id = selected("Sound")
+    removeObject: src_band_id
+    # Linearize
+    Formula: "sqrt(abs(self))"
+    
+    # C. CARRIER
+    selectObject: carrier_id
+    carrier_band_id = Filter (pass Hann band): f_low, f_high, filter_smoothing_hz
+    
+    # D. MIX
+    selectObject: output_id
+    s_env$ = string$(env_id)
+    s_carrier$ = string$(carrier_band_id)
+    Formula: "self + object(" + s_carrier$ + ", x) * object(" + s_env$ + ", x)"
+    
+    # Cleanup
+    removeObject: env_id, carrier_band_id
+    
+    if i mod 5 = 0
+        appendInfoLine: "Band ", i, "/", number_of_bands
     endif
-    
-    # Calculate band limits
-    bandUpper = blowerLim + i * step
-    bandLower = bandUpper - step
-    temp1 = round(barkToHertz(bandLower))
-    temp2 = round(barkToHertz(bandUpper))
-    
-    # Print band information
-    appendInfoLine: "Band ", i, " from ", temp1, " to ", temp2, " Hz"
-    
-    # Account for filter smoothing
-    temp1 = temp1 + filter_edge_buffer
-    temp2 = temp2 - filter_edge_buffer
-    
-    # Extract energy from source in this band
-    select s1
-    Filter (pass Hann band): temp1, temp2, filter_smoothing
-    
-    # Get overall RMS in band
-    rms_SOURCE = Get root-mean-square: 0, 0
-    Rename: "temp"
-    
-    # Extract intensity contour
-    To Intensity: minimum_pitch, time_step, "yes"
-    Down to IntensityTier
-    
-    # Create noise band
-    Create Sound: "noise", 0, t, sr, "randomGauss(0, noise_amplitude)"
-    Filter (pass Hann band): temp1, temp2, filter_smoothing
-    
-    # Apply intensity contour to noise
-    plus IntensityTier temp
-    Multiply: "no"
-    
-    # Adjust overall amplitude to match source
-    rms_IS = Get root-mean-square: 0, 0
-    Formula: "self * (rms_SOURCE / rms_IS)"
-    Rename: "band'i'"
-    
-    # Add previous bands
-    if i > 1
-        Formula: "self[col] + Sound_previous[col]"
-    endif
-    
-    # Clean up intermediate objects
-    select all
-    minus s1
-    minus Sound band'i'
-    Remove
 endfor
 
-# Select final result
-select Sound band'number_of_bands'
-Rename: s1$ + "_vocoded"
-final_result = selected("Sound")
+# --- 5. FINALIZE & RESTORE ---
+selectObject: output_id
+Rename: orig_name$ + "_Vocoder"
+Scale peak: 0.99
 
-# Play if requested
-if play_after_processing
+# Restore Sample Rate if we downsampled
+if work_sr <> orig_sr
+    appendInfoLine: "Restoring sample rate..."
+    final_resampled = Resample: orig_sr, 50
+    removeObject: output_id
+    output_id = final_resampled
+    selectObject: output_id
+    Rename: orig_name$ + "_Vocoder"
+endif
+
+# Cleanup
+removeObject: input_id, carrier_id
+
+appendInfoLine: "Done!"
+
+if play_after
     Play
 endif
-
-# Keep or remove intermediate objects
-if not keep_intermediate_objects
-    # The final sound is already renamed, so intermediate bands are removed
-endif
-
-# Select both original and result
-selectObject: s1, final_result
