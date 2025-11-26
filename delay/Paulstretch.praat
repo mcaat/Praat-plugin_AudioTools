@@ -19,12 +19,10 @@
 #   https://github.com/ShaiCohen-ops/Praat-plugin_AudioTools
 # ============================================================
 
-# Paulstretch algorithm for Praat 
-# Creates extreme time-stretching with phase randomization
+# Fast Paulstretch algorithm for Praat 
 
 form Paulstretch parameters
     comment Select a Sound object first, then run this script
-    comment WARNING: This is a long process - Praat may appear frozen!
     positive stretch_factor 4.0
     positive window_size 0.25
     positive overlap_percent 50
@@ -66,24 +64,22 @@ output_duration = duration * stretch_factor
 # Calculate number of frames
 n_frames = ceiling(output_duration / hop_out) + 1
 
-writeInfoLine: "Paulstretch Processing"
+writeInfoLine: "Paulstretch Processing (Fast Mode)"
 appendInfoLine: "Input duration: ", fixed$(duration, 3), " s"
 appendInfoLine: "Output duration: ", fixed$(output_duration, 3), " s"
 appendInfoLine: "Number of frames: ", n_frames
-appendInfoLine: ""
 
-# Create initial empty output sound
+# Create empty output sound
 output_sound = Create Sound from formula: "temp_output", 1, 0, output_duration + window_size, fs, "0"
 
-# Progress every N frames
+# Progress reporting
 progress_interval = max(1, round(n_frames / 20))
 
 # Process each frame
 for iframe from 0 to n_frames - 1
-    # Progress indicator
     if iframe mod progress_interval = 0
         percent = iframe / n_frames * 100
-        appendInfoLine: "Progress: ", fixed$(percent, 1), "% (frame ", iframe, "/", n_frames, ")"
+        appendInfoLine: "Progress: ", fixed$(percent, 1), "%"
     endif
     
     # Input center time
@@ -91,144 +87,101 @@ for iframe from 0 to n_frames - 1
     t_start = t_in - window_size / 2
     t_end = t_in + window_size / 2
     
-    # Extract frame from input with proper bounds
+    # 1. EXTRACT FRAME
     selectObject: sound
     extract_start = max(0, t_start)
     extract_end = min(duration, t_end)
     
-    # Only process if we have some audio to extract
+    # Only process if we have a valid time range
     if extract_end > extract_start
         frame = Extract part: extract_start, extract_end, "rectangular", 1.0, "no"
         
-        # Get actual frame duration
+        # 2. PAD FRAME
         selectObject: frame
-        actual_dur = Get total duration
+        dur_frame = Get total duration
         
-        # Pad if necessary to reach window_size
-        if actual_dur < window_size
-            # Need to pad
+        if abs(dur_frame - window_size) > 0.00001
+            padded = Create Sound from formula: "padded", 1, 0, window_size, fs, "0"
+            
+            offset = 0
             if t_start < 0
-                # Pad at start
-                pad_dur = 0 - t_start
-                if pad_dur > 0.001
-                    pad = Create Sound from formula: "pad", 1, 0, pad_dur, fs, "0"
-                    plusObject: frame
-                    temp = Concatenate
-                    removeObject: pad, frame
-                    frame = temp
-                endif
+                offset = abs(t_start)
             endif
             
-            selectObject: frame
-            actual_dur = Get total duration
+            s_offset$ = fixed$(offset, 6)
+            s_end$ = fixed$(offset+dur_frame, 6)
+            frame_id = frame
             
-            if actual_dur < window_size
-                # Pad at end
-                pad_dur = window_size - actual_dur
-                if pad_dur > 0.001
-                    pad = Create Sound from formula: "pad", 1, 0, pad_dur, fs, "0"
-                    selectObject: frame
-                    plusObject: pad
-                    temp = Concatenate
-                    removeObject: pad, frame
-                    frame = temp
-                endif
-            endif
+            selectObject: padded
+            Formula: "if x >= " + s_offset$ + " and x <= " + s_end$ + " then self + object(" + string$(frame_id) + ", x - " + s_offset$ + ") else self fi"
+            
+            removeObject: frame
+            frame = padded
         endif
-        
-        # Apply Hanning window
+
+        # 3. APPLY WINDOW 
         selectObject: frame
         Multiply by window: "Hanning"
-        
-        # Convert to spectrum
+
+        # 4. FAST PHASE RANDOMIZATION
         selectObject: frame
         spectrum = To Spectrum: "yes"
-        
-        # Get spectrum properties
         selectObject: spectrum
-        n_bins = Get number of bins
+        mat_complex = To Matrix
         
-        # Randomize phases bin by bin
-        for i_bin from 1 to n_bins
-            selectObject: spectrum
-            re = Get real value in bin: i_bin
-            im = Get imaginary value in bin: i_bin
-            mag = sqrt(re * re + im * im)
-            
-            # Randomize phase (except DC and Nyquist)
-            if i_bin = 1 or i_bin = n_bins
-                phase = 0
-            else
-                phase = randomUniform(-pi, pi)
-            endif
-            
-            # Set new values
-            new_re = mag * cos(phase)
-            new_im = mag * sin(phase)
-            
-            selectObject: spectrum
-            Set real value in bin: i_bin, new_re
-            Set imaginary value in bin: i_bin, new_im
-        endfor
+        # Clone Matrix for Phases (Robust dimension handling)
+        selectObject: mat_complex
+        mat_phase = Copy: "phase_matrix"
+        Formula: "randomUniform(-pi, pi)"
         
-        # Convert back to sound
-        selectObject: spectrum
+        # Apply Phases
+        selectObject: mat_complex
+        phase_id = mat_phase
+        
+        # Use object[id, row, col] syntax
+        Formula: "if (col=1 or col=ncol) then self else (if row=1 then sqrt(self[1,col]^2 + self[2,col]^2) * cos(object[" + string$(phase_id) + ",1,col]) else sqrt(self[1,col]^2 + self[2,col]^2) * sin(object[" + string$(phase_id) + ",1,col]) fi) fi"
+
+        # Convert back
+        selectObject: mat_complex
+        spectrum_mod = To Spectrum
+        selectObject: spectrum_mod
         processed_sound = To Sound
         
-        # Apply window again
+        # 5. APPLY WINDOW AGAIN
         selectObject: processed_sound
         Multiply by window: "Hanning"
         
-        # Manual overlap-add: read samples and add to output
-        selectObject: processed_sound
-        proc_n_samples = Get number of samples
-        
-        # Calculate output position in samples
+        # 6. FAST OVERLAP-ADD (Universal Method)
         t_out = iframe * hop_out
-        out_start_sample = round(t_out * fs) + 1
+        Shift times to: "start time", t_out
         
         selectObject: output_sound
-        out_n_samples = Get number of samples
+        t_add_end = t_out + window_size
         
-        # Add each sample to output
-        for i_sample from 1 to proc_n_samples
-            out_sample_index = out_start_sample + i_sample - 1
-            
-            if out_sample_index >= 1 and out_sample_index <= out_n_samples
-                # Get value from processed sound
-                selectObject: processed_sound
-                add_value = Get value at sample number: 1, i_sample
-                
-                # Get current value from output
-                selectObject: output_sound
-                current_value = Get value at sample number: 1, out_sample_index
-                
-                # Add and set
-                new_value = current_value + add_value
-                Set value at sample number: 1, out_sample_index, new_value
-            endif
-        endfor
+        # Prepare string variables for the formula
+        # This prevents the formula parser from getting confused by variable names
+        proc_id = processed_sound
+        s_t_out$ = fixed$(t_out, 6)
+        s_t_end$ = fixed$(t_add_end, 6)
         
-        # Clean up frame processing objects
-        removeObject: frame, spectrum, processed_sound
+        # The Universal Fast Method:
+        # We use a standard Formula with a conditional check.
+        # This adds the processed frame to the output ONLY within the relevant time window.
+        Formula: "if x >= " + s_t_out$ + " and x <= " + s_t_end$ + " then self + object(" + string$(proc_id) + ", x) else self fi"
+        
+        # Cleanup
+        removeObject: frame, spectrum, mat_complex, mat_phase, spectrum_mod, processed_sound
     endif
 endfor
 
 # Finalize
 selectObject: output_sound
-Rename: sound_name$ + "_paulstretch_" + string$(stretch_factor) + "x"
+Rename: sound_name$ + "_paulstretch_fast_" + string$(stretch_factor) + "x"
 Scale peak: 0.99
 Play
 
-# Clean up mono conversion if it was created
 if n_channels > 1
     removeObject: sound
 endif
 
-appendInfoLine: ""
 appendInfoLine: "Done!"
-appendInfoLine: "Kept: Original sound + stretched result"
-
-# Select both original and result for user
-selectObject: original_sound
-plusObject: output_sound
