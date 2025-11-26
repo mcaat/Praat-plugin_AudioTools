@@ -19,217 +19,145 @@
 #   https://github.com/ShaiCohen-ops/Praat-plugin_AudioTools
 # ============================================================
 
-# Fast Chunked Spectral Blur Script
-form Spectral Blur
-    comment Presets:
-    optionmenu preset: 1
-        option Default
-        option Strong Blur
-        option Subtle Blur
-        option Large Chunks
-        option Small Chunks
-    positive blur_radius 3.0
-    positive chunk_size_seconds 2.0
+# Fast Chunked Spectral Blur (v4.0 - Sound Design Edition)
+# Optimized for Praat 6.x
+# Adds Variable Window Sizes for distinct sonic textures
+
+form Spectral Blur Texture
+    comment Select a Vibe:
+    optionmenu Preset: 1
+        option 1. Standard Blur (Clean)
+        option 2. Ethereal Pad (Drone-like)
+        option 3. Underwater (Muffled)
+        option 4. Robotic / Metallic (Gritty)
+        option 5. Rhythmic Glitch (Stutter)
+    
+    comment Advanced Overrides (Ignored if using presets):
+    boolean Override_settings 0
+    positive Blur_radius 3.0
+    positive Window_size_sec 0.025
+    positive Chunk_size_sec 2.0
 endform
 
-# Apply preset values
-if preset = 2 ; Strong Blur
-    blur_radius = 5.0
-elif preset = 3 ; Subtle Blur
-    blur_radius = 1.5
-elif preset = 4 ; Large Chunks
-    chunk_size_seconds = 4.0
-elif preset = 5 ; Small Chunks
-    chunk_size_seconds = 1.0
+# --- PRESET LOGIC ---
+# We set 3 variables: Radius (smoothness), Window (texture), Chunk (continuity)
+
+if override_settings = 0
+    if preset = 1 ; Standard Blur
+        blur_radius = 3.0
+        window_size = 0.025
+        chunk_size = 2.0
+    
+    elsif preset = 2 ; Ethereal Pad
+        # Long window = High frequency resolution. 
+        # Great for turning noise into chords/drones.
+        blur_radius = 10.0
+        window_size = 0.08
+        chunk_size = 5.0  ; Long chunks for continuity
+        
+    elsif preset = 3 ; Underwater
+        # Moderate window, massive blur.
+        # Smears everything together.
+        blur_radius = 20.0
+        window_size = 0.03
+        chunk_size = 3.0
+        
+    elsif preset = 4 ; Robotic / Metallic
+        # Very short window = High time resolution, bad freq resolution.
+        # Sounds like a vocoder or sci-fi scanner.
+        blur_radius = 2.0
+        window_size = 0.008 
+        chunk_size = 1.0
+        
+    elsif preset = 5 ; Rhythmic Glitch
+        # Short chunks create audible seams (clicks/rhythms)
+        blur_radius = 5.0
+        window_size = 0.02
+        chunk_size = 0.25 ; Very short chunks create a "chopper" effect
+    endif
+else
+    # User overrides
+    blur_radius = blur_radius
+    window_size = window_size_sec
+    chunk_size = chunk_size_sec
 endif
+
+# --- STANDARD PROCESSING BELOW ---
 
 if numberOfSelected("Sound") <> 1
-    exitScript: "Please select one Sound"
+    exitScript: "Please select exactly one Sound object"
 endif
 
+sound_id = selected("Sound")
 sound_name$ = selected$("Sound")
-sound = selected("Sound")
-original_duration = Get total duration
-sampling_rate = Get sampling frequency
+fs = Get sampling frequency
 total_samples = Get number of samples
-channels = Get number of channels
 
-writeInfoLine: "Starting fast chunked spectral blur..."
-appendInfoLine: "Original duration: ", fixed$(original_duration, 3), " seconds"
-appendInfoLine: "Blur radius: ", blur_radius
-appendInfoLine: "Chunk size: ", chunk_size_seconds, " seconds"
+# Calculation parameters
+chunk_samples = round(chunk_size * fs)
+num_chunks = ceiling(total_samples / chunk_samples)
 
-chunk_size_samples = round(chunk_size_seconds * sampling_rate)
-num_chunks = ceiling(total_samples / chunk_size_samples)
+writeInfoLine: "Fast Spectral Blur: ", preset$
+appendInfoLine: "Window: ", fixed$(window_size, 4), "s | Radius: ", blur_radius
 
-appendInfoLine: "Processing ", num_chunks, " chunks"
+chunk_ids# = zero# (num_chunks)
 
-# Create empty sound to start with
-select sound
-results = Create Sound from formula: "temp_results", channels, 0, 0.001, sampling_rate, "0"
-
-for chunk from 1 to num_chunks
-    start_sample = (chunk - 1) * chunk_size_samples + 1
-    end_sample = min(start_sample + chunk_size_samples - 1, total_samples)
+for i from 1 to num_chunks
+    selectObject: sound_id
     
-    if start_sample > total_samples
-        goto end_chunks
-    endif
+    start_sample = (i - 1) * chunk_samples + 1
+    end_sample = min(start_sample + chunk_samples - 1, total_samples)
     
-    appendInfoLine: "Processing chunk ", chunk, "/", num_chunks
-    
-    select sound
-    start_time = (start_sample - 1) / sampling_rate
-    end_time = (end_sample - 1) / sampling_rate
+    start_time = (start_sample - 1) / fs
+    end_time = (end_sample - 1) / fs
     
     if end_time > start_time
-        chunk_sound = Extract part: start_time, end_time, "rectangular", 1, "no"
+        chunk = Extract part: start_time, end_time, "rectangular", 1.0, "no"
         
-        # Process this chunk
-        @processSpectralBlur: chunk_sound, blur_radius
+        # 1. To Spectrogram (Using Dynamic Window Size)
+        # We adjust the max freq and time step based on window size for stability
+        time_step = window_size / 8
+        To Spectrogram: window_size, 5000, time_step, 20, "Gaussian"
+        spec = selected("Spectrogram")
         
-        # Combine with previous results
-        select results
-        current_duration = Get total duration
-        
-        if chunk = 1
-            # First chunk - replace the empty sound
-            select results
-            Remove
-            select processed
-            results = Copy: "temp_results"
-        else
-            # Subsequent chunks - concatenate
-            select results
-            plus processed
-            concatenated = Concatenate
-            select results
-            Remove
-            results = concatenated
+        # 2. Vectorized Blur
+        if blur_radius >= 1
+            loop_count = round(blur_radius)
+            for k from 1 to loop_count
+                Formula: "if row > 1 and row < nrow then (self[row-1,col] + 2*self + self[row+1,col])/4 else self fi"
+            endfor
         endif
         
-        # Clean up
-        select chunk_sound
-        Remove
-        select processed
-        Remove
+        # 3. Back to Sound
+        To Sound: fs
+        processed_chunk = selected("Sound")
+        chunk_ids#[i] = processed_chunk
+        
+        removeObject: chunk, spec
+        
+        if i mod 5 = 0
+            perc = i / num_chunks * 100
+            appendInfoLine: "Progress: ", fixed$(perc, 1), "%"
+        endif
     endif
 endfor
 
-label end_chunks
-
-# Final processing
-select results
-Scale: 0.99
-Rename: sound_name$ + "_blurred"
-
-appendInfoLine: "Spectral blur complete!"
-select results
-
-# Spectral blur procedure for each chunk
-procedure processSpectralBlur: .sound, .blur_radius
-    select .sound
-    .duration = Get total duration
-    
-    # Skip very short chunks
-    if .duration < 0.05
-        processed = Copy: "processed"
-    else
-        # Create spectrogram with optimized settings for chunk
-        To Spectrogram: 0.025, 5000, 0.005, 20, "Gaussian"
-        .spectrogram = selected("Spectrogram")
-        
-        # Convert to matrix
-        select .spectrogram
-        To Matrix
-        .matrix = selected("Matrix")
-        
-        # Get dimensions
-        .nx = Get number of columns
-        .ny = Get number of rows
-        
-        # Set blur parameters
-        .blur = round(.blur_radius)
-        if .blur < 1
-            .blur = 1
-        endif
-        
-        # Create output matrix
-        select .matrix
-        Copy: "blurred"
-        .blurred_matrix = selected("Matrix")
-        
-        # Fast blur processing - optimized for chunks
-        appendInfoLine: "  Blurring ", .nx, " x ", .ny, " matrix..."
-        
-        # Process fewer frequency bins for speed
-        if .ny > 100
-            .bin_step = 2
-        else
-            .bin_step = 1
-        endif
-        
-        for .frame from 1 to .nx
-            # Process every 4th frame for speed
-            if (.frame - 1) mod 4 <> 0
-                goto next_frame
-            endif
-            
-            for .bin from 1 to .ny
-                # Process every nth bin for speed
-                if .bin_step > 1 and (.bin - 1) mod .bin_step <> 0
-                    goto next_bin
-                endif
-                # Get current value
-                select .matrix
-                .current_val = Get value in cell: .bin, .frame
-                
-                # Simple blur: average with frequency neighbors only
-                .sum = .current_val
-                .count = 1
-                
-                # Add frequency neighbors within blur radius
-                for .offset from 1 to .blur
-                    # Upper neighbor
-                    if .bin + .offset <= .ny
-                        .neighbor_val = Get value in cell: .bin + .offset, .frame
-                        .sum = .sum + .neighbor_val
-                        .count = .count + 1
-                    endif
-                    
-                    # Lower neighbor  
-                    if .bin - .offset >= 1
-                        .neighbor_val = Get value in cell: .bin - .offset, .frame
-                        .sum = .sum + .neighbor_val
-                        .count = .count + 1
-                    endif
-                endfor
-                
-                # Set averaged value
-                .new_val = .sum / .count
-                select .blurred_matrix
-                Set value: .bin, .frame, .new_val
-                
-                label next_bin
-            endfor
-            
-            label next_frame
-        endfor
-        
-        # Convert back to sound
-        select .blurred_matrix
-        To Spectrogram
-        .blurred_spectrogram = selected("Spectrogram")
-        
-        select .blurred_spectrogram
-        processed = To Sound: 44100
-        
-        # Clean up intermediate objects
-        select .spectrogram
-        plus .matrix
-        plus .blurred_matrix
-        plus .blurred_spectrogram
-        Remove
+# Finalize
+selectObject: chunk_ids#[1]
+for i from 2 to num_chunks
+    if chunk_ids#[i] > 0
+        plusObject: chunk_ids#[i]
     endif
-endproc
+endfor
+
+Concatenate
+result_id = selected("Sound")
+Rename: sound_name$ + "_Blur_" + string$(preset)
+Scale peak: 0.99
+
+for i from 1 to num_chunks
+    if chunk_ids#[i] > 0
+        removeObject: chunk_ids#[i]
+    endif
+endfor
 Play
