@@ -18,10 +18,11 @@
 #   Cohen, S. (2025). Praat AudioTools: An Offline Analysis–Resynthesis Toolkit for Experimental Composition.
 #   https://github.com/ShaiCohen-ops/Praat-plugin_AudioTools
 # ============================================================
-# Spectral Freeze with Decay and Glissando
+# Fast Spectral Freeze (v4.0 - Ultimate Speed)
+# Combines Formula Batching + Downsampling for maximum performance.
 
-form Spectral Freeze with Decay & Gliss
-    optionmenu Preset: 1
+form Spectral Freeze (Ultimate)
+    optionmenu preset: 1
         option Custom (manual settings below)
         option Freeze (classic hold)
         option Gentle decay (slow fade)
@@ -32,293 +33,286 @@ form Spectral Freeze with Decay & Gliss
         option Crystalline (minimal decay + micro-up)
         option Submerge (minimal decay + micro-down)
     
-    comment ─────────────────────────────────────
-    comment Manual settings (for Custom preset only):
-    comment Analysis parameters
-    positive Frame_step_(ms) 10
-    positive Analysis_window_(ms) 35
-    positive Max_frequency_(Hz) 8000
-    integer Top_partials_(K) 10
+    comment --- Performance ---
+    choice   processing_quality 2
+        button High (Original Rate - Slow)
+        button Medium (22050 Hz - Fast)
+        button Low (11025 Hz - Super Fast)
+
+    comment --- Analysis ---
+    positive frame_step_ms 10
+    positive analysis_window_ms 35
+    positive max_frequency_hz 8000
+    integer  top_partials 10
     
-    comment Spectral transformation
-    positive Decay_factor_(d) 0.2
-    real Glissando_(octaves_per_sec) 0.1
+    comment --- Transformation ---
+    positive decay_factor 0.2
+    real     glissando_oct_sec 0.1
     
-    comment Output
-    positive Tail_duration_(seconds) 2
-    boolean Create_stereo_output 1
-    positive Stereo_delay_(ms) 8
-    real Target_peak_(dB) -1
-    boolean Apply_light_filtering 0
-    boolean Play_after_processing 1
+    comment --- Output ---
+    positive tail_duration_sec 2
+    boolean  create_stereo_output 1
+    positive stereo_delay_ms 8
+    real     target_peak_db -1
+    boolean  play_after 1
 endform
 
-# Apply preset values
+# --- APPLY PRESETS ---
 if preset = 2
-    # Freeze (classic hold)
     decay_factor = 0.999
-    glissando = 0
+    glissando_oct_sec = 0
 elsif preset = 3
-    # Gentle decay (slow fade)
     decay_factor = 0.5
-    glissando = 0
+    glissando_oct_sec = 0
 elsif preset = 4
-    # Rising shimmer (decay + up)
     decay_factor = 0.3
-    glissando = 0.15
+    glissando_oct_sec = 0.15
 elsif preset = 5
-    # Falling shimmer (decay + down)
     decay_factor = 0.3
-    glissando = -0.15
+    glissando_oct_sec = -0.15
 elsif preset = 6
-    # Ghostly rise (strong decay + up)
     decay_factor = 0.15
-    glissando = 0.3
+    glissando_oct_sec = 0.3
 elsif preset = 7
-    # Deep dive (strong decay + down)
     decay_factor = 0.15
-    glissando = -0.3
+    glissando_oct_sec = -0.3
 elsif preset = 8
-    # Crystalline (minimal decay + micro-up)
     decay_factor = 0.9
-    glissando = 0.05
+    glissando_oct_sec = 0.05
 elsif preset = 9
-    # Submerge (minimal decay + micro-down)
     decay_factor = 0.9
-    glissando = -0.05
+    glissando_oct_sec = -0.05
 endif
 
-# Convert parameters
-dt = frame_step / 1000
-windowDuration = analysis_window / 1000
+# --- SETUP ---
+if numberOfSelected("Sound") <> 1
+    exitScript: "Please select exactly one Sound."
+endif
+
+orig_id = selected("Sound")
+orig_name$ = selected$("Sound")
+orig_sr = Get sampling frequency
+n_channels = Get number of channels
+
+# 1. PREPARE INPUT (Mono Copy)
+if n_channels > 1
+    selectObject: orig_id
+    input_id = Convert to mono
+else
+    selectObject: orig_id
+    input_id = Copy: "input"
+endif
+
+# 2. DOWNSAMPLE (The Speed Boost)
+if processing_quality = 2
+    Resample: 22050, 50
+    temp_id = selected("Sound")
+    removeObject: input_id
+    input_id = temp_id
+elsif processing_quality = 3
+    Resample: 11025, 50
+    temp_id = selected("Sound")
+    removeObject: input_id
+    input_id = temp_id
+endif
+
+# Get working parameters
+selectObject: input_id
+work_sr = Get sampling frequency
+# Add Tail
+tail_id = Create Sound from formula: "tail", 1, 0, tail_duration_sec, work_sr, "0"
+selectObject: input_id
+plusObject: tail_id
+temp_id = Concatenate
+removeObject: input_id, tail_id
+input_id = temp_id
+
+selectObject: input_id
+tot_dur = Get total duration
+
+# Calc Constants
+dt = frame_step_ms / 1000
+win_dur = analysis_window_ms / 1000
 d_frame = decay_factor ^ dt
-gliss_ratio = 2 ^ (glissando * dt)
-k = top_partials
-stereoDelaySeconds = stereo_delay / 1000
+gliss_ratio = 2 ^ (glissando_oct_sec * dt)
+stereo_delay_sec = stereo_delay_ms / 1000
+nframes = floor((tot_dur - win_dur) / dt)
 
-writeInfoLine: "Spectral Freeze Processing..."
-appendInfoLine: "Preset: ", preset$
-appendInfoLine: "d_frame = ", fixed$(d_frame, 4)
-appendInfoLine: "gliss_ratio = ", fixed$(gliss_ratio, 6)
-
-# Get input sound
-sound = selected("Sound")
-selectObject: sound
-soundName$ = selected$("Sound")
-originalDuration = Get total duration
-sampleRate = Get sampling frequency
-channels = Get number of channels
-
-# Convert to mono if stereo
-if channels = 2
-    appendInfoLine: "Converting stereo to mono for processing..."
-    Convert to mono
-    monoSound = selected("Sound")
-else
-    monoSound = sound
-endif
-
-selectObject: monoSound
-
-# Add silent tail
-appendInfoLine: "Adding ", tail_duration, "s tail..."
-silentTail = Create Sound from formula: "silent_tail", 1, 0, tail_duration, sampleRate, "0"
-
-selectObject: monoSound
-plusObject: silentTail
-Concatenate
-extendedSound = selected("Sound")
-Rename: soundName$ + "_extended"
-
-selectObject: extendedSound
-duration = Get total duration
-numberOfFrames = floor(duration / dt)
-
-appendInfoLine: "Total duration with tail: ", fixed$(duration, 2), " s"
-appendInfoLine: "Frames to process: ", numberOfFrames
-
-# Initialize accumulator arrays
-for i to k
-    a_freq_'i' = 0
-    a_amp_'i' = 0
-endfor
-
-# Main analysis loop - store per-frame snapshots
-for frame to numberOfFrames
-    # Progress indicator
-    if frame mod 50 = 0
-        appendInfoLine: "Analyzing frame ", frame, "/", numberOfFrames
-    endif
-    
-    # Time markers for this frame
-    tCenter = (frame - 0.5) * dt
-    tStart = tCenter - windowDuration/2
-    tEnd = tCenter + windowDuration/2
-    
-    # Extract windowed segment
-    selectObject: extendedSound
-    if tStart >= 0 and tEnd <= duration
-        Extract part: tStart, tEnd, "Hanning", 1, "no"
-        segment = selected("Sound")
-        
-        # Get spectrum of this segment
-        To Spectrum: "yes"
-        segSpectrum = selected("Spectrum")
-        
-        # Find top K spectral peaks
-        nBins = Get number of bins
-        binWidth = Get bin width
-        maxBin = min(nBins, floor(max_frequency / binWidth) + 1)
-        
-        # Collect all spectral magnitudes up to maxFreq
-        for bin to maxBin
-            freq = (bin - 1) * binWidth
-            re = Get real value in bin: bin
-            im = Get imaginary value in bin: bin
-            mag_'bin' = sqrt(re^2 + im^2)
-            freq_bin_'bin' = freq
-        endfor
-        
-        # Find K largest peaks
-        for i to k
-            maxMag = 0
-            maxBinIdx = 0
-            for bin to maxBin
-                if mag_'bin' > maxMag
-                    maxMag = mag_'bin'
-                    maxBinIdx = bin
-                endif
-            endfor
-            
-            if maxBinIdx > 0
-                peak_freq_'i' = freq_bin_'maxBinIdx'
-                peak_amp_'i' = mag_'maxBinIdx'
-                # Zero out this peak and neighbors
-                for bin from max(1, maxBinIdx-2) to min(maxBin, maxBinIdx+2)
-                    mag_'bin' = 0
-                endfor
-            else
-                peak_freq_'i' = 0
-                peak_amp_'i' = 0
-            endif
-        endfor
-        
-        # Clean up
-        selectObject: segSpectrum
-        Remove
-        selectObject: segment
-        Remove
-        
-        # Update accumulators
-        for i to k
-            # Apply decay
-            a_amp_'i' = a_amp_'i' * d_frame
-            
-            # Apply glissando
-            if a_freq_'i' > 0
-                a_freq_'i' = a_freq_'i' * gliss_ratio
-                if a_freq_'i' > max_frequency
-                    a_freq_'i' = max_frequency
-                endif
-            endif
-            
-            # Replace if current peak is louder
-            if peak_amp_'i' >= a_amp_'i' and peak_freq_'i' > 0
-                a_amp_'i' = peak_amp_'i'
-                a_freq_'i' = peak_freq_'i'
-            endif
-            
-            # STORE SNAPSHOT for this frame
-            f_freq_'frame'_'i' = a_freq_'i'
-            f_amp_'frame'_'i' = a_amp_'i'
-        endfor
-    else
-        # Out of bounds - store zeros
-        for i to k
-            f_freq_'frame'_'i' = 0
-            f_amp_'frame'_'i' = 0
-        endfor
-    endif
-endfor
-
-appendInfoLine: "Synthesizing..."
-
-# Determine number of output channels
+# Create Output (at working rate)
+out_chans = 1
 if create_stereo_output
-    numChannels = 2
-else
-    numChannels = 1
+    out_chans = 2
+endif
+output_id = Create Sound from formula: "Freeze", out_chans, 0, tot_dur, work_sr, "0"
+
+# --- INITIALIZE ACCUMULATORS ---
+acc_freq# = zero#(top_partials)
+acc_amp# = zero#(top_partials)
+
+# Pre-calc bin width suppression
+bin_hz = 1 / win_dur
+suppress_bins = round(50 / bin_hz) 
+if suppress_bins < 1 
+    suppress_bins = 1 
 endif
 
-# Create output sound
-output = Create Sound from formula: soundName$ + "_freeze", numChannels, 0, duration, sampleRate, "0"
+writeInfoLine: "Spectral Freeze (Ultimate): ", preset$
+appendInfoLine: "Rate: ", work_sr, " Hz"
+appendInfoLine: "Processing ", nframes, " frames..."
 
-# Resynthesize using stored per-frame values
-for frame to numberOfFrames
-    if frame mod 50 = 0
-        appendInfoLine: "Synthesizing frame ", frame, "/", numberOfFrames
+# --- MAIN LOOP ---
+for i from 0 to nframes - 1
+    if i mod 50 = 0
+        perc = i / nframes * 100
+        appendInfoLine: "Progress: ", fixed$(perc, 1), "%"
     endif
+
+    # Time bounds
+    tc = i * dt + win_dur/2
+    t_start = tc - win_dur/2
+    t_end = tc + win_dur/2
     
-    tFrameStart = (frame - 1) * dt
-    tFrameEnd = frame * dt
+    # 1. ANALYZE FRAME
+    selectObject: input_id
+    frame_id = Extract part: t_start, t_end, "hanning", 1, "yes"
     
-    # Add each partial for this frame
-    for i to k
-        freq_val = f_freq_'frame'_'i'
-        amp_val = f_amp_'frame'_'i'
-        
-        if freq_val > 0 and amp_val > 0
-            selectObject: output
-            # Channel 1 (left) - original
-            Formula (part): tFrameStart, tFrameEnd, 1, 1, 
-                ... ~self + amp_val * sin(2*pi*freq_val*x) * (0.5 - 0.5*cos(2*pi*(x-tFrameStart)/dt))
-            
-            # Channel 2 (right) - if stereo, add with delay
-            if create_stereo_output
-                # Right channel gets delayed version
-                delayTime = stereoDelaySeconds
-                Formula (part): tFrameStart, tFrameEnd, 2, 2, 
-                    ... ~self + amp_val * sin(2*pi*freq_val*(x-delayTime)) * (0.5 - 0.5*cos(2*pi*((x-delayTime)-tFrameStart)/dt))
+    spec_id = To Spectrum: "yes"
+    selectObject: spec_id
+    mat_id = To Matrix
+    
+    # Calculate Magnitude (Row 1)
+    Formula: "if row = 1 then sqrt(self^2 + self[2,col]^2) else 0 fi"
+    
+    nc = Get number of columns
+    freq_step = (work_sr/2) / (nc - 1)
+    
+    # Limit Frequency Range via masking
+    max_col = round(max_frequency_hz / freq_step) + 1
+    if max_col > nc
+        max_col = nc
+    endif
+    Formula: "if col > " + string$(max_col) + " then 0 else self fi"
+    
+    # 2. UPDATE ACCUMULATORS
+    for k from 1 to top_partials
+        acc_amp#[k] = acc_amp#[k] * d_frame
+        if acc_freq#[k] > 0
+            acc_freq#[k] = acc_freq#[k] * gliss_ratio
+            if acc_freq#[k] > max_frequency_hz
+                acc_freq#[k] = max_frequency_hz
             endif
         endif
     endfor
+    
+    # 3. PICK NEW PEAKS
+    for k from 1 to top_partials
+        selectObject: mat_id
+        
+        # Manual Max Search
+        cur_max = -1
+        cur_col = -1
+        
+        for c from 1 to max_col
+            val = Get value in cell: 1, c
+            if val > cur_max
+                cur_max = val
+                cur_col = c
+            endif
+        endfor
+        
+        if cur_max > 0.000001
+            cur_freq = (cur_col - 1) * freq_step
+            
+            # FREEZE LOGIC
+            if cur_max > acc_amp#[k]
+                acc_amp#[k] = cur_max
+                acc_freq#[k] = cur_freq
+            endif
+            
+            # Suppress
+            sup_c1 = cur_col - suppress_bins
+            sup_c2 = cur_col + suppress_bins
+            Formula: "if col >= " + string$(sup_c1) + " and col <= " + string$(sup_c2) + " then 0 else self fi"
+        endif
+    endfor
+    
+    # 4. BATCH SYNTHESIS
+    Create Sound from formula: "grain", out_chans, 0, win_dur, work_sr, "0"
+    grain_id = selected("Sound")
+    Shift times to: "start time", t_start
+    
+    left_sum$ = ""
+    right_sum$ = ""
+    s_delay$ = fixed$(stereo_delay_sec, 6)
+    
+    found_partials = 0
+    
+    for k from 1 to top_partials
+        freq = acc_freq#[k]
+        amp = acc_amp#[k]
+        
+        if freq > 0 and amp > 0.000001
+            amp_lin = amp / (win_dur * work_sr / 4)
+            s_freq$ = fixed$(freq, 2)
+            s_amp$ = fixed$(amp_lin, 8)
+            
+            term_L$ = " + " + s_amp$ + " * sin(2*pi*" + s_freq$ + "*x)"
+            left_sum$ = left_sum$ + term_L$
+            
+            if out_chans = 2
+                term_R$ = " + " + s_amp$ + " * sin(2*pi*" + s_freq$ + "*(x - " + s_delay$ + "))"
+                right_sum$ = right_sum$ + term_R$
+            endif
+            
+            found_partials = 1
+        endif
+    endfor
+    
+    if found_partials
+        if out_chans = 1
+            Formula: "self" + left_sum$
+        else
+            Formula: "if row = 1 then self" + left_sum$ + " else self" + right_sum$ + " fi"
+        endif
+    endif
+    
+    # Window (Hanning)
+    s_dur$ = fixed$(win_dur, 6)
+    s_start$ = fixed$(t_start, 6)
+    Formula: "self * 0.5 * (1 - cos(2*pi * (x - " + s_start$ + ") / " + s_dur$ + "))"
+    
+    # 5. ADD TO OUTPUT
+    selectObject: output_id
+    s_gid$ = string$(grain_id)
+    s_end$ = fixed$(t_end, 6)
+    Formula: "if x >= " + s_start$ + " and x <= " + s_end$ + " then self + object(" + s_gid$ + ", x) else self fi"
+    
+    # Cleanup
+    removeObject: frame_id, spec_id, mat_id, grain_id
 endfor
 
-# Apply subtle filtering difference if stereo
-if create_stereo_output
-    appendInfoLine: "Applying stereo differentiation..."
-    selectObject: output
-    # Subtle HF boost on right channel only
-    Formula (part): 0, duration, 2, 2, "self + 0.08*(self - self(x - 1/sampleRate))"
-    Formula (part): 0, duration, 2, 2, "self * 0.99"
+# --- FINALIZE ---
+selectObject: output_id
+Rename: orig_name$ + "_Freeze"
+
+# Normalize
+Scale peak: 10^(target_peak_db / 20)
+
+# Restore Sample Rate if needed
+if work_sr <> orig_sr
+    appendInfoLine: "Restoring sample rate to ", orig_sr, " Hz..."
+    resampled_id = Resample: orig_sr, 50
+    removeObject: output_id
+    output_id = resampled_id
+    selectObject: output_id
+    Rename: orig_name$ + "_Freeze"
 endif
 
-# Optional filtering
-if apply_light_filtering
-    appendInfoLine: "Applying light filtering..."
-    selectObject: output
-    Filter (pass Hann band): 20, max_frequency, 100
-endif
+# Clean inputs
+removeObject: input_id
 
-appendInfoLine: "Normalizing output..."
-
-# Normalize output
-selectObject: output
-Scale peak: 10^(target_peak / 20)
-
-# Cleanup intermediate objects
-if channels = 2 and monoSound != sound
-    selectObject: monoSound
-    Remove
-endif
-selectObject: silentTail
-plusObject: extendedSound
-Remove
-
-appendInfoLine: "Done!"
-
-# Select output and optionally play
-selectObject: output
-if play_after_processing
+if play_after
     Play
 endif
+
+appendInfoLine: "Done!"
