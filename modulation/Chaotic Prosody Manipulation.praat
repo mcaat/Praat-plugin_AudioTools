@@ -207,6 +207,7 @@ selectObject: sound_repitched
 Formula: "self * object[am_envelope, col]"
 sound_final = selected("Sound")
 Rename: sound_name$ + "_chaotic"
+Scale peak: 0.99
 Play
 
 # ===================================================================
