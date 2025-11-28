@@ -19,687 +19,229 @@
 #   https://github.com/ShaiCohen-ops/Praat-plugin_AudioTools
 # ============================================================
 
-# Phase Vocoder-Based Pitch Correction for Praat
-# Higher quality than PSOLA, closer to commercial Auto-Tune
-# Version 1.0 - Fully tested and debugged
+# ============================================================
+# Praat AudioTools - Pitch Correction v3 (Scales & Modes)
+# ============================================================
 
-# Enhanced smoothing procedure with weighted average
-procedure enhancedSmoothPitchTier: .pitch_tier, .smoothing_strength
-    selectObject: .pitch_tier
-    .num_points = Get number of points
-    
-    if .num_points < 2
-        .result = .pitch_tier
-        goto skip_enhanced_smooth
-    endif
-    
-    Copy: "enhanced_smoothed_pitch_tier"
-    .smoothed_tier = selected("PitchTier")
-    
-    selectObject: .smoothed_tier
-    for .point from .num_points to 1
-        Remove point: .point
-    endfor
-    
-    .window_size = round(3 + (.smoothing_strength - 1) * 1.5)
-    .passes = 1 + round(.smoothing_strength / 3)
-    
-    appendInfoLine: "Enhanced smoothing: window=", .window_size, " points, passes=", .passes
-    
-    for .point to .num_points
-        selectObject: .pitch_tier
-        .time = Get time from index: .point
-        .freq = Get value at index: .point
-        selectObject: .smoothed_tier
-        Add point: .time, .freq
-    endfor
-    
-    for .pass to .passes
-        selectObject: .smoothed_tier
-        Copy: "temp_smoothed"
-        .temp_tier = selected("PitchTier")
-        
-        selectObject: .smoothed_tier
-        for .point from .num_points to 1
-            Remove point: .point
-        endfor
-        
-        for .point to .num_points
-            selectObject: .temp_tier
-            .time = Get time from index: .point
-            
-            .total_weight = 0
-            .weighted_sum = 0
-            
-            for .offset from -.window_size to .window_size
-                .target_point = .point + .offset
-                if .target_point >= 1 and .target_point <= .num_points
-                    .weight = 1.0 / (1 + abs(.offset))
-                    .neighbor_freq = Get value at index: .target_point
-                    .weighted_sum = .weighted_sum + (.neighbor_freq * .weight)
-                    .total_weight = .total_weight + .weight
-                endif
-            endfor
-            
-            .smoothed_freq = .weighted_sum / .total_weight
-            
-            selectObject: .smoothed_tier
-            Add point: .time, .smoothed_freq
-        endfor
-        
-        selectObject: .temp_tier
-        Remove
-    endfor
-    
-    .result = .smoothed_tier
-    
-    label skip_enhanced_smooth
-endproc
-
-# Ultra-smooth method using median filtering
-procedure ultraSmoothPitchTier: .pitch_tier, .smoothing_strength
-    selectObject: .pitch_tier
-    .num_points = Get number of points
-    
-    if .num_points < 2
-        .result = .pitch_tier
-        goto skip_ultra_smooth
-    endif
-    
-    Copy: "ultra_smoothed_pitch_tier"
-    .smoothed_tier = selected("PitchTier")
-    
-    selectObject: .smoothed_tier
-    for .point from .num_points to 1
-        Remove point: .point
-    endfor
-    
-    .max_window = min(15, .num_points - 1)
-    .window_size = round(3 + (.smoothing_strength - 1) * (.max_window - 3) / 9)
-    .window_size = max(3, .window_size)
-    
-    appendInfoLine: "Ultra smoothing: window=", .window_size, " points"
-    
-    for .point to .num_points
-        selectObject: .pitch_tier
-        .time = Get time from index: .point
-        
-        .max_possible = min(.window_size * 2 + 1, .num_points)
-        .frequencies# = zero#(.max_possible)
-        .count = 0
-        
-        for .offset from -.window_size to .window_size
-            .target_point = .point + .offset
-            if .target_point >= 1 and .target_point <= .num_points
-                .count = .count + 1
-                .frequencies#[.count] = Get value at index: .target_point
-            endif
-        endfor
-        
-        if .count > 0
-            .temp# = zero#(.count)
-            for .i to .count
-                .temp#[.i] = .frequencies#[.i]
-            endfor
-            .sorted# = sort#(.temp#)
-            .median_index = round(.count / 2)
-            if .median_index < 1
-                .median_index = 1
-            endif
-            .median_freq = .sorted#[.median_index]
-        else
-            .median_freq = Get value at index: .point
-        endif
-        
-        selectObject: .smoothed_tier
-        Add point: .time, .median_freq
-    endfor
-    
-    .result = .smoothed_tier
-    
-    label skip_ultra_smooth
-endproc
-
-# Function to get note name
-procedure getNoteName: .semitones
-    .note_names$[1] = "C"
-    .note_names$[2] = "C#"
-    .note_names$[3] = "D"
-    .note_names$[4] = "D#"
-    .note_names$[5] = "E"
-    .note_names$[6] = "F"
-    .note_names$[7] = "F#"
-    .note_names$[8] = "G"
-    .note_names$[9] = "G#"
-    .note_names$[10] = "A"
-    .note_names$[11] = "A#"
-    .note_names$[12] = "B"
-    
-    .index = (.semitones mod 12) + 1
-    if .index < 1
-        .index = .index + 12
-    endif
-    
-    .octave = 4 + floor((.semitones + 9) / 12)
-    .result$ = .note_names$[.index] + string$(.octave)
-endproc
-
-# Function to find nearest note in scale
-procedure findNearestScaleNote: .semitone, .scale_pattern$
-    .upward = 0
-    while .upward < 6
-        .test_index = (.semitone + .upward) mod 12 + 1
-        if .test_index < 1
-            .test_index = .test_index + 12
-        endif
-        .test_note$ = mid$(.scale_pattern$, .test_index, 1)
-        if .test_note$ = "1"
-            .result = .semitone + .upward
-            goto found
-        endif
-        .upward = .upward + 1
-    endwhile
-    
-    .downward = 1
-    while .downward < 6
-        .test_index = (.semitone - .downward) mod 12 + 1
-        if .test_index < 1
-            .test_index = .test_index + 12
-        endif
-        .test_note$ = mid$(.scale_pattern$, .test_index, 1)
-        if .test_note$ = "1"
-            .result = .semitone - .downward
-            goto found
-        endif
-        .downward = .downward + 1
-    endwhile
-    
-    .result = .semitone
-    
-    label found
-endproc
-
-form Phase Vocoder Pitch Correction
+form Pitch Correction Tool
     comment === PRESETS ===
     optionmenu Preset 1
-        option Custom (use settings below)
-        option Natural and Subtle
-        option Balanced Correction
-        option Strong Correction
-        option Maximum Auto-Tune Effect
-        option Vibrato Removal Only
-    comment === BASIC SETTINGS ===
-    optionmenu Pitch_reference 1
-        option A4 = 440 Hz
-        option A4 = 432 Hz
-        option C4 = 261.63 Hz
-    optionmenu Scale 1
+        option Custom
+        option Natural Correction
+        option Hard Auto-Tune
+        option Robot / Monotone
+    
+    comment === MUSICAL KEY ===
+    optionmenu Root_Note 1
+        option C
+        option C# / Db
+        option D
+        option D# / Eb
+        option E
+        option F
+        option F# / Gb
+        option G
+        option G# / Ab
+        option A
+        option A# / Bb
+        option B
+    
+    optionmenu Scale_Type 2
         option Chromatic (All notes)
-        option C Major / A Minor
-        option G Major / E Minor
-        option D Major / B Minor
-        option A Major / F# Minor
-        option E Major / C# Minor
-        option B Major / G# Minor
-        option F# Major / D# Minor
-        option Db Major / Bb Minor
-        option Ab Major / F Minor
-        option Eb Major / C Minor
-        option Bb Major / G Minor
-        option F Major / D Minor
-    integer Transposition_semitones 0
-    comment === PROCESSING METHOD ===
-    optionmenu Processing_method 1
-        option Phase Vocoder (Highest Quality)
-        option PSOLA (Faster)
-    comment === VIBRATO REMOVAL ===
-    boolean Remove_vibrato 0
-    choice Smoothing_method 1
-        button Enhanced Smoothing
-        button Ultra Smoothing
-    positive Smoothing_strength 8
-    comment === ARTIFACT REDUCTION ===
-    positive Correction_strength 80
-    comment (1-100, higher = stronger correction)
-    positive Transition_smoothness 5
-    comment (1-10, higher = smoother)
-    positive Pitch_time_step 0.01
-    comment (smaller = more detailed)
-    comment === ADVANCED SETTINGS ===
-    positive Min_pitch_Hz 75
-    positive Max_pitch_Hz 600
-    boolean Show_debug_info 0
+        option Major (Ionian)
+        option Minor (Natural)
+        option Minor (Harmonic)
+        option Pentatonic Major
+        option Pentatonic Minor
+        option Dorian
+        option Phrygian
+        option Lydian
+        option Mixolydian
+        
+    comment === CORRECTION PARAMS ===
+    integer Transpose_Output 0
+    positive Strength_Percent 100
+    
+    comment === ANALYSIS ===
+    positive Pitch_Time_Step 0.01
+    positive Min_Pitch 75
+    positive Max_Pitch 600
+    
+    comment === OUTPUT ===
+    boolean Play_Result 1
 endform
 
-# Apply preset settings
-if preset = 2
-    remove_vibrato = 0
-    correction_strength = 50
-    transition_smoothness = 8
-    pitch_time_step = 0.01
-    smoothing_method = 1
-    smoothing_strength = 5
-    processing_method = 1
-    appendInfoLine: "=== Preset applied: Natural and Subtle ==="
-elsif preset = 3
-    remove_vibrato = 1
-    correction_strength = 75
-    transition_smoothness = 6
-    pitch_time_step = 0.01
-    smoothing_method = 1
-    smoothing_strength = 7
-    processing_method = 1
-    appendInfoLine: "=== Preset applied: Balanced Correction ==="
-elsif preset = 4
-    remove_vibrato = 1
-    correction_strength = 90
-    transition_smoothness = 4
-    pitch_time_step = 0.008
-    smoothing_method = 1
-    smoothing_strength = 8
-    processing_method = 1
-    appendInfoLine: "=== Preset applied: Strong Correction ==="
-elsif preset = 5
-    remove_vibrato = 1
-    correction_strength = 100
-    transition_smoothness = 2
-    pitch_time_step = 0.005
-    smoothing_method = 2
-    smoothing_strength = 10
-    processing_method = 1
-    appendInfoLine: "=== Preset applied: Maximum Auto-Tune Effect ==="
-elsif preset = 6
-    remove_vibrato = 1
-    correction_strength = 0
-    transition_smoothness = 10
-    pitch_time_step = 0.01
-    smoothing_method = 2
-    smoothing_strength = 9
-    processing_method = 1
-    appendInfoLine: "=== Preset applied: Vibrato Removal Only ==="
-else
-    appendInfoLine: "=== Using custom settings ==="
+# --- 1. Preset Logic ---
+strength = strength_Percent
+smooth_amount = 0
+
+if preset == 2
+    # Natural
+    strength = 60
+    smooth_amount = 2.0
+elsif preset == 3
+    # Hard Auto-Tune
+    strength = 100
+    smooth_amount = 0
+elsif preset == 4
+    # Robot
+    strength = 100
+    smooth_amount = 10.0
 endif
 
-# Check if a Sound object is selected
-if !selected("Sound")
-    exitScript: "Please select a Sound object first!"
+# --- 2. Input Check ---
+if not selected("Sound")
+    exitScript: "Please select a Sound object first."
 endif
 
-# Validate correction strength
-if correction_strength < 0
-    correction_strength = 0
-endif
-if correction_strength > 100
-    correction_strength = 100
-endif
+id_sound = selected("Sound")
+name$ = selected$("Sound")
 
-# Validate transition smoothness
-if transition_smoothness < 1
-    transition_smoothness = 1
-endif
-if transition_smoothness > 10
-    transition_smoothness = 10
-endif
+# --- 3. Define Scale Patterns ---
+# Patterns represent semitones 0-11. "1"=Allowed, "0"=Skip.
+# Standard: C, C#, D, D#, E, F, F#, G, G#, A, A#, B
 
-# Set reference frequency
-if pitch_reference = 1
-    reference_frequency = 440.0
-    ref_name$ = "A4=440Hz"
-elsif pitch_reference = 2
-    reference_frequency = 432.0
-    ref_name$ = "A4=432Hz"
-else
-    reference_frequency = 261.63
-    ref_name$ = "C4=261.63Hz"
-endif
+pat$ = "111111111111" ; Default Chromatic
 
-# Define scale patterns (1 = note in scale, 0 = not in scale)
-if scale = 1
-    scale_pattern$ = "111111111111"
-    scale_name$ = "Chromatic"
-elsif scale = 2
-    scale_pattern$ = "101011010101"
-    scale_name$ = "C Major / A Minor"
-elsif scale = 3
-    scale_pattern$ = "011010110101"
-    scale_name$ = "G Major / E Minor"
-elsif scale = 4
-    scale_pattern$ = "010110101101"
-    scale_name$ = "D Major / B Minor"
-elsif scale = 5
-    scale_pattern$ = "101101011010"
-    scale_name$ = "A Major / F# Minor"
-elsif scale = 6
-    scale_pattern$ = "011010110101"
-    scale_name$ = "E Major / C# Minor"
-elsif scale = 7
-    scale_pattern$ = "010110101101"
-    scale_name$ = "B Major / G# Minor"
-elsif scale = 8
-    scale_pattern$ = "101101011010"
-    scale_name$ = "F# Major / D# Minor"
-elsif scale = 9
-    scale_pattern$ = "110101101010"
-    scale_name$ = "Db Major / Bb Minor"
-elsif scale = 10
-    scale_pattern$ = "101011010101"
-    scale_name$ = "Ab Major / F Minor"
-elsif scale = 11
-    scale_pattern$ = "010110101101"
-    scale_name$ = "Eb Major / C Minor"
-elsif scale = 12
-    scale_pattern$ = "101101011010"
-    scale_name$ = "Bb Major / G Minor"
-else
-    scale_pattern$ = "101011010101"
-    scale_name$ = "F Major / D Minor"
+if scale_Type == 2
+    # Major (W W H W W W H) -> 0 2 4 5 7 9 11
+    pat$ = "101011010101"
+elsif scale_Type == 3
+    # Minor Natural (W H W W H W W) -> 0 2 3 5 7 8 10
+    pat$ = "101101011010"
+elsif scale_Type == 4
+    # Minor Harmonic (Raise 7th) -> 0 2 3 5 7 8 11
+    pat$ = "101101011001"
+elsif scale_Type == 5
+    # Pentatonic Major (0 2 4 7 9)
+    pat$ = "101010010100"
+elsif scale_Type == 6
+    # Pentatonic Minor (0 3 5 7 10)
+    pat$ = "100101010010"
+elsif scale_Type == 7
+    # Dorian (Minor with natural 6) -> 0 2 3 5 7 9 10
+    pat$ = "101101010110"
+elsif scale_Type == 8
+    # Phrygian (Minor with flat 2) -> 0 1 3 5 7 8 10
+    pat$ = "110101011010"
+elsif scale_Type == 9
+    # Lydian (Major with sharp 4) -> 0 2 4 6 7 9 11
+    pat$ = "101010110101"
+elsif scale_Type == 10
+    # Mixolydian (Major with flat 7) -> 0 2 4 5 7 9 10
+    pat$ = "101011010110"
 endif
 
-sound = selected("Sound")
-sound_name$ = selected$("Sound")
-sample_rate = Get sampling frequency
+# Map Root Note to Index (0=C, 1=C#, etc)
+# The form returns index 1..12, so we subtract 1.
+root_idx = root_Note - 1
 
-appendInfoLine: ""
-appendInfoLine: "=== Phase Vocoder Pitch Correction ==="
-appendInfoLine: "Processing method: ", if processing_method = 1 then "Phase Vocoder" else "PSOLA" fi
-appendInfoLine: "Reference: ", ref_name$
-appendInfoLine: "Scale: ", scale_name$
-appendInfoLine: "Transposition: ", transposition_semitones, " semitones"
-appendInfoLine: "Correction strength: ", correction_strength, "%"
+# --- 4. Pipeline ---
+selectObject: id_sound
+id_manip = To Manipulation: pitch_Time_Step, min_Pitch, max_Pitch
 
-# PHASE VOCODER METHOD
-if processing_method = 1
-    appendInfoLine: "Using Phase Vocoder (High Quality)"
+selectObject: id_manip
+id_pitch = Extract pitch tier
+
+# --- 5. Smoothing (FIXED) ---
+if smooth_amount > 0
+    selectObject: id_pitch
+    # PitchTiers use 'Stylize' to smooth curves, not 'Smooth'
+    Stylize: smooth_amount, "Hz"
+endif
+
+# --- 6. Correction Logic ---
+selectObject: id_pitch
+Copy: "Corrected"
+id_corr = selected("PitchTier")
+
+n = Get number of points
+for i from 1 to n
+    selectObject: id_corr
+    val = Get value at index: i
+    time = Get time from index: i
     
-    # Extract pitch contour first
-    selectObject: sound
-    To Pitch: pitch_time_step, min_pitch_Hz, max_pitch_Hz
-    pitch_object = selected("Pitch")
-    
-    # Convert pitch to PitchTier for manipulation
-    Down to PitchTier
-    original_pitch_tier = selected("PitchTier")
-    
-    # Check if we have any pitch points
-    num_points = Get number of points
-    
-    if num_points = 0
-        appendInfoLine: "ERROR: No pitch detected in the sound!"
-        appendInfoLine: "Try adjusting Min/Max pitch Hz settings."
-        selectObject: pitch_object
-        Remove
-        selectObject: original_pitch_tier
-        Remove
-        exitScript: "No pitch detected. Adjust pitch detection range."
-    endif
-    
-    appendInfoLine: "Detected ", num_points, " pitch points"
-    
-    # Apply vibrato removal if requested
-    if remove_vibrato
-        appendInfoLine: "Applying vibrato removal..."
-        appendInfoLine: "Method: ", if smoothing_method = 1 then "Enhanced" else "Ultra" fi
-        appendInfoLine: "Strength: ", smoothing_strength
+    if val > 50 and val < 1000
+        # A. Convert Hz to MIDI Note Number (C-1 = 0, A440 = 69)
+        midi_float = 69 + 12 * log2(val / 440)
+        midi_round = round(midi_float)
         
-        if smoothing_method = 1
-            @enhancedSmoothPitchTier: original_pitch_tier, smoothing_strength
-            processed_pitch_tier = enhancedSmoothPitchTier.result
-        else
-            @ultraSmoothPitchTier: original_pitch_tier, smoothing_strength
-            processed_pitch_tier = ultraSmoothPitchTier.result
+        # B. Determine Pitch Class relative to Root (0-11)
+        # (midi_round - root_idx) mod 12
+        # We perform modulo math carefully for negative numbers
+        pc_raw = (midi_round - root_idx) mod 12
+        if pc_raw < 0
+            pc_raw = pc_raw + 12
         endif
         
-        selectObject: original_pitch_tier
-        Remove
-        original_pitch_tier = processed_pitch_tier
-    endif
-    
-    # Create corrected pitch tier
-    selectObject: original_pitch_tier
-    Copy: "corrected_pitch_tier"
-    corrected_pitch_tier = selected("PitchTier")
-    
-    # Get pitch information
-    selectObject: corrected_pitch_tier
-    num_points = Get number of points
-    semitone_ratio = 2^(1/12)
-    correction_factor = correction_strength / 100
-    
-    appendInfoLine: "Correcting ", num_points, " pitch points..."
-    
-    # Correct each pitch point
-    points_corrected = 0
-    for point to num_points
-        selectObject: corrected_pitch_tier
-        time = Get time from index: point
-        original_freq = Get value at index: point
+        # C. Check Scale Pattern
+        # String index is 1-based, so add 1
+        is_allowed$ = mid$(pat$, pc_raw + 1, 1)
         
-        if original_freq > 50 and original_freq < 1000
-            semitones_from_ref = 12 * log2(original_freq / reference_frequency)
-            nearest_semitone = round(semitones_from_ref)
+        if is_allowed$ == "0"
+            # Note is OUT of scale. Find nearest neighbor.
+            # We look +/- 1 semitone.
             
-            scale_index = (nearest_semitone mod 12) + 1
-            if scale_index < 1
-                scale_index = scale_index + 12
+            # Check Upper (+1)
+            pc_up = (pc_raw + 1) mod 12
+            allowed_up$ = mid$(pat$, pc_up + 1, 1)
+            
+            # Check Lower (-1)
+            pc_down = (pc_raw - 1)
+            if pc_down < 0 
+                pc_down = 11 
             endif
+            allowed_down$ = mid$(pat$, pc_down + 1, 1)
             
-            scale_note$ = mid$(scale_pattern$, scale_index, 1)
-            
-            if scale = 1 or scale_note$ = "1"
-                corrected_semitone = nearest_semitone
-            else
-                @findNearestScaleNote: nearest_semitone, scale_pattern$
-                corrected_semitone = findNearestScaleNote.result
-            endif
-            
-            corrected_semitone = corrected_semitone + transposition_semitones
-            target_freq = reference_frequency * (semitone_ratio ^ corrected_semitone)
-            corrected_freq = original_freq + (target_freq - original_freq) * correction_factor
-            
-            selectObject: corrected_pitch_tier
-            Remove point: point
-            Add point: time, corrected_freq
-            
-            points_corrected = points_corrected + 1
-            
-            if show_debug_info
-                @getNoteName: corrected_semitone
-                note_name$ = getNoteName.result$
-                appendInfoLine: "Point ", point, ": ", fixed$(original_freq, 2), " Hz -> ", fixed$(corrected_freq, 2), " Hz (", note_name$, ")"
+            # Decide where to snap
+            if allowed_up$ == "1" and allowed_down$ == "0"
+                midi_round = midi_round + 1
+            elsif allowed_down$ == "1" and allowed_up$ == "0"
+                midi_round = midi_round - 1
+            elsif allowed_down$ == "1" and allowed_up$ == "1"
+                # Both neighbors valid? Snap to physically closer one.
+                diff = midi_float - midi_round
+                if diff > 0
+                    midi_round = midi_round + 1
+                else
+                    midi_round = midi_round - 1
+                endif
             endif
         endif
-    endfor
-    
-    appendInfoLine: "Corrected ", points_corrected, " pitch points"
-    
-    # Use Praat's built-in pitch shifting with formant preservation
-    appendInfoLine: "Applying phase vocoder resynthesis..."
-    
-    selectObject: sound
-    start_time = Get start time
-    end_time = Get end time
-    duration = end_time - start_time
-    
-    # Create manipulation object for high-quality resynthesis
-    selectObject: sound
-    To Manipulation: pitch_time_step, min_pitch_Hz, max_pitch_Hz
-    manipulation = selected("Manipulation")
-    
-    # Replace pitch tier
-    selectObject: manipulation
-    plusObject: corrected_pitch_tier
-    Replace pitch tier
-    
-    # Get resynthesis
-    selectObject: manipulation
-    Get resynthesis (overlap-add)
-    output_sound = selected("Sound")
-    
-    # Clean up
-    selectObject: pitch_object
-    Remove
-    selectObject: original_pitch_tier
-    Remove
-    selectObject: corrected_pitch_tier
-    Remove
-    selectObject: manipulation
-    Remove
-    
-else
-    # PSOLA METHOD (faster alternative)
-    appendInfoLine: "Using PSOLA (Fast)"
-    
-    selectObject: sound
-    To Manipulation: pitch_time_step, min_pitch_Hz, max_pitch_Hz
-    manipulation = selected("Manipulation")
-    
-    selectObject: manipulation
-    Extract pitch tier
-    original_pitch_tier = selected("PitchTier")
-    
-    # Check if we have any pitch points
-    num_points = Get number of points
-    
-    if num_points = 0
-        appendInfoLine: "ERROR: No pitch detected in the sound!"
-        appendInfoLine: "Try adjusting Min/Max pitch Hz settings."
-        selectObject: original_pitch_tier
-        Remove
-        selectObject: manipulation
-        Remove
-        exitScript: "No pitch detected. Adjust pitch detection range."
-    endif
-    
-    appendInfoLine: "Detected ", num_points, " pitch points"
-    
-    # Keep backup for comparison
-    Copy: "backup_original_pitch_tier"
-    backup_original_pitch_tier = selected("PitchTier")
-    
-    if remove_vibrato
-        appendInfoLine: "Applying vibrato removal..."
-        appendInfoLine: "Method: ", if smoothing_method = 1 then "Enhanced" else "Ultra" fi
-        appendInfoLine: "Strength: ", smoothing_strength
         
-        selectObject: original_pitch_tier
-        if smoothing_method = 1
-            @enhancedSmoothPitchTier: original_pitch_tier, smoothing_strength
-            processed_pitch_tier = enhancedSmoothPitchTier.result
-        else
-            @ultraSmoothPitchTier: original_pitch_tier, smoothing_strength
-            processed_pitch_tier = ultraSmoothPitchTier.result
-        endif
-        selectObject: original_pitch_tier
-        Remove
-        original_pitch_tier = processed_pitch_tier
-    endif
-    
-    selectObject: original_pitch_tier
-    Copy: "corrected_pitch_tier"
-    corrected_pitch_tier = selected("PitchTier")
-    
-    selectObject: corrected_pitch_tier
-    num_points = Get number of points
-    semitone_ratio = 2^(1/12)
-    correction_factor = correction_strength / 100
-    
-    appendInfoLine: "Correcting ", num_points, " pitch points..."
-    
-    points_corrected = 0
-    for point to num_points
-        selectObject: corrected_pitch_tier
-        time = Get time from index: point
-        original_freq = Get value at index: point
+        # D. Convert Target MIDI back to Hz
+        target_val = 440 * (2 ^ ((midi_round - 69) / 12))
         
-        if original_freq > 50 and original_freq < 1000
-            semitones_from_ref = 12 * log2(original_freq / reference_frequency)
-            nearest_semitone = round(semitones_from_ref)
-            
-            scale_index = (nearest_semitone mod 12) + 1
-            if scale_index < 1
-                scale_index = scale_index + 12
-            endif
-            
-            scale_note$ = mid$(scale_pattern$, scale_index, 1)
-            
-            if scale = 1 or scale_note$ = "1"
-                corrected_semitone = nearest_semitone
-            else
-                @findNearestScaleNote: nearest_semitone, scale_pattern$
-                corrected_semitone = findNearestScaleNote.result
-            endif
-            
-            corrected_semitone = corrected_semitone + transposition_semitones
-            target_freq = reference_frequency * (semitone_ratio ^ corrected_semitone)
-            corrected_freq = original_freq + (target_freq - original_freq) * correction_factor
-            
-            selectObject: corrected_pitch_tier
-            Remove point: point
-            Add point: time, corrected_freq
-            
-            points_corrected = points_corrected + 1
-            
-            if show_debug_info
-                @getNoteName: corrected_semitone
-                note_name$ = getNoteName.result$
-                appendInfoLine: "Point ", point, ": ", fixed$(original_freq, 2), " Hz -> ", fixed$(corrected_freq, 2), " Hz (", note_name$, ")"
-            endif
+        # E. Apply Transpose (Output only)
+        # We apply transpose AFTER finding the scale tone
+        if transpose_Output != 0
+             target_val = target_val * (2 ^ (transpose_Output / 12))
         endif
-    endfor
-    
-    appendInfoLine: "Corrected ", points_corrected, " pitch points"
-    
-    selectObject: manipulation
-    plusObject: corrected_pitch_tier
-    Replace pitch tier
-    
-    selectObject: manipulation
-    Get resynthesis (overlap-add)
-    output_sound = selected("Sound")
-    
-    # Clean up
-    selectObject: backup_original_pitch_tier
-    Remove
-    selectObject: original_pitch_tier
-    Remove
-    selectObject: corrected_pitch_tier
-    Remove
-    selectObject: manipulation
-    Remove
-endif
 
-# Create output name
-selectObject: output_sound
-output_name$ = sound_name$ + "_corrected"
-if processing_method = 1
-    output_name$ = output_name$ + "_pv"
-else
-    output_name$ = output_name$ + "_psola"
-endif
-if transposition_semitones != 0
-    if transposition_semitones > 0
-        output_name$ = output_name$ + "_up" + string$(abs(transposition_semitones))
-    else
-        output_name$ = output_name$ + "_down" + string$(abs(transposition_semitones))
+        # F. Blend (Strength)
+        final_val = val + (target_val - val) * (strength / 100)
+        
+        Remove point: i
+        Add point: time, final_val
     endif
-endif
-if remove_vibrato
-    output_name$ = output_name$ + "_smoothed"
-endif
-Rename: output_name$
+endfor
 
-# Play result
-selectObject: output_sound
-Play
+# --- 7. Resynthesis ---
+selectObject: id_manip
+plusObject: id_corr
+Replace pitch tier
 
-appendInfoLine: ""
-appendInfoLine: "=== Processing Complete ==="
-appendInfoLine: "Method: ", if processing_method = 1 then "Phase Vocoder" else "PSOLA" fi
-appendInfoLine: "Scale: ", scale_name$
-appendInfoLine: "Reference: ", ref_name$
-appendInfoLine: "Correction strength: ", correction_strength, "%"
-appendInfoLine: "Transposition: ", transposition_semitones, " semitones"
-appendInfoLine: "Vibrato removal: ", if remove_vibrato then "Yes" else "No" fi
-appendInfoLine: "Output: ", output_name$
-appendInfoLine: "=== Done! ==="
+selectObject: id_manip
+id_out = Get resynthesis (overlap-add)
+Rename: name$ + "_fixed"
+
+# --- 8. Cleanup ---
+selectObject: id_manip
+plusObject: id_pitch
+plusObject: id_corr
+Remove
+
+selectObject: id_out
+if play_Result
+    Play
+endif
