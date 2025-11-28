@@ -19,24 +19,6 @@
 #   https://github.com/ShaiCohen-ops/Praat-plugin_AudioTools
 # ============================================================
 
-###############################################################################
-# L-SYSTEM GRANULAR GATING + PITCH EFFECT
-# Fast, Praat-native granular gating and pitch processing driven by L-system
-# generative rules. Symbols control rhythmic on/off patterns and cumulative
-# pitch shifts applied via Manipulation object.
-#
-# SYMBOL SEMANTICS:
-#   G = Play grain (gate ON with RepeatGain)
-#   S = Skip grain (gate OFF or use BaseSkipGain)
-#   U = Increase pitch of next grain by PitchStep_semitones
-#   D = Decrease pitch of next grain by PitchStep_semitones  
-#   N = Neutral (no pitch change for next grain)
-#
-# The L-system generates a control pattern that is mapped cyclically across
-# all grains. Pitch changes accumulate over time (walk up/down), while
-# G/S symbols create rhythmic gating patterns.
-###############################################################################
-
 form L-System Granular Gating + Pitch Effect
     comment === Presets ===
     optionmenu Preset 9
@@ -72,12 +54,16 @@ form L-System Granular Gating + Pitch Effect
     positive MaxPitchShift_semitones 12
 endform
 
-###############################################################################
-# 0. APPLY PRESET
-###############################################################################
+# --- 1. Apply Preset ---
+axiom$ = axiom$
+rule_G$ = rule_G$
+rule_S$ = rule_S$
+rule_U$ = rule_U$
+rule_D$ = rule_D$
+rule_N$ = rule_N$
 
 if preset = 1
-    # Rhythmic Stutter - Heavy skip patterns for glitchy rhythm
+    # Rhythmic Stutter
     axiom$ = "GS"
     rule_G$ = "GSS"
     rule_S$ = "SG"
@@ -92,7 +78,7 @@ if preset = 1
     basePitchShift_semitones = 0
     pitchStep_semitones = 1
 elsif preset = 2
-    # Pitch Walk Up - Gradual pitch ascent
+    # Pitch Walk Up
     axiom$ = "GU"
     rule_G$ = "GUN"
     rule_S$ = "N"
@@ -101,13 +87,10 @@ elsif preset = 2
     rule_N$ = "G"
     iterations = 3
     grainDuration_ms = 60
-    grainOverlap = 1
-    baseSkipGain = 0.0
-    repeatGain = 1.0
     basePitchShift_semitones = -6
     pitchStep_semitones = 1
 elsif preset = 3
-    # Pitch Walk Down - Gradual pitch descent
+    # Pitch Walk Down
     axiom$ = "GD"
     rule_G$ = "GDN"
     rule_S$ = "N"
@@ -116,13 +99,10 @@ elsif preset = 3
     rule_N$ = "G"
     iterations = 3
     grainDuration_ms = 60
-    grainOverlap = 1
-    baseSkipGain = 0.0
-    repeatGain = 1.0
     basePitchShift_semitones = 6
     pitchStep_semitones = 1
 elsif preset = 4
-    # Chaotic Glitch - Complex evolving pattern (default from form)
+    # Chaotic Glitch
     axiom$ = "GSUD"
     rule_G$ = "GSUN"
     rule_S$ = "N"
@@ -131,13 +111,10 @@ elsif preset = 4
     rule_N$ = "G"
     iterations = 3
     grainDuration_ms = 50
-    grainOverlap = 1
-    baseSkipGain = 0.0
-    repeatGain = 1.0
     basePitchShift_semitones = 0
     pitchStep_semitones = 2
 elsif preset = 5
-    # Melodic Arpeggio - Creates up-down melodic patterns
+    # Melodic Arpeggio
     axiom$ = "GUUUDDD"
     rule_G$ = "G"
     rule_S$ = "G"
@@ -146,13 +123,10 @@ elsif preset = 5
     rule_N$ = "N"
     iterations = 2
     grainDuration_ms = 80
-    grainOverlap = 1
-    baseSkipGain = 0.0
-    repeatGain = 1.0
     basePitchShift_semitones = -4
     pitchStep_semitones = 2
 elsif preset = 6
-    # Sparse Texture - Lots of silence, minimal grains
+    # Sparse Texture
     axiom$ = "S"
     rule_G$ = "GSSS"
     rule_S$ = "SSSG"
@@ -161,13 +135,11 @@ elsif preset = 6
     rule_N$ = "S"
     iterations = 4
     grainDuration_ms = 30
-    grainOverlap = 1
     baseSkipGain = 0.05
     repeatGain = 0.8
-    basePitchShift_semitones = 0
     pitchStep_semitones = 3
 elsif preset = 7
-    # Dense Granular - Mostly playing, continuous texture
+    # Dense Granular
     axiom$ = "G"
     rule_G$ = "GGUNG"
     rule_S$ = "G"
@@ -176,13 +148,11 @@ elsif preset = 7
     rule_N$ = "NG"
     iterations = 3
     grainDuration_ms = 25
-    grainOverlap = 1
     baseSkipGain = 0.2
     repeatGain = 0.9
-    basePitchShift_semitones = 0
     pitchStep_semitones = 1
 elsif preset = 8
-    # Fibonacci Pattern - Mathematical structure
+    # Fibonacci Pattern
     axiom$ = "G"
     rule_G$ = "GN"
     rule_S$ = "S"
@@ -191,417 +161,202 @@ elsif preset = 8
     rule_N$ = "G"
     iterations = 5
     grainDuration_ms = 45
-    grainOverlap = 1
-    baseSkipGain = 0.0
-    repeatGain = 1.0
-    basePitchShift_semitones = 0
     pitchStep_semitones = 2
 endif
-# If preset = 9 (Custom), use values from form as entered
 
-###############################################################################
-# 1. ERROR CHECKING
-###############################################################################
-
-# Check if a Sound is selected
-numberOfSelectedSounds = numberOfSelected("Sound")
-if numberOfSelectedSounds = 0
+# --- 2. Error Check ---
+if not selected("Sound")
     exitScript: "ERROR: Please select a Sound object first."
 endif
 
-# Get the selected sound
-soundID = selected("Sound")
-soundName$ = selected$("Sound")
+id_sound = selected("Sound")
+name$ = selected$("Sound")
+dur = Get total duration
+sr = Get sampling frequency
+start_t = Get start time
+end_t = Get end time
+n_ch = Get number of channels
 
-# Get sound properties
-selectObject: soundID
-duration = Get total duration
-sampleRate = Get sampling frequency
-startTime = Get start time
-endTime = Get end time
-numChannels = Get number of channels
+# --- 3. L-System Generation ---
+writeInfoLine: "Generating L-System..."
 
-if duration <= 0
-    exitScript: "ERROR: Sound duration must be greater than 0."
-endif
+curr_str$ = axiom$
+curr_len = length(curr_str$)
 
-###############################################################################
-# 2. L-SYSTEM STRING GENERATION (Non-recursive, iterative)
-###############################################################################
-
-appendInfoLine: "=== L-System Granular Gating + Pitch Effect ==="
-appendInfoLine: "Processing sound: ", soundName$
-appendInfoLine: "Duration: ", fixed$(duration, 3), " seconds"
-
-# Show which preset was used
-if preset = 1
-    appendInfoLine: "Preset: Rhythmic Stutter"
-elsif preset = 2
-    appendInfoLine: "Preset: Pitch Walk Up"
-elsif preset = 3
-    appendInfoLine: "Preset: Pitch Walk Down"
-elsif preset = 4
-    appendInfoLine: "Preset: Chaotic Glitch"
-elsif preset = 5
-    appendInfoLine: "Preset: Melodic Arpeggio"
-elsif preset = 6
-    appendInfoLine: "Preset: Sparse Texture"
-elsif preset = 7
-    appendInfoLine: "Preset: Dense Granular"
-elsif preset = 8
-    appendInfoLine: "Preset: Fibonacci Pattern"
-else
-    appendInfoLine: "Preset: Custom"
-endif
-
-appendInfoLine: ""
-appendInfoLine: "Generating L-system string..."
-
-# Initialize with axiom
-currentString$ = axiom$
-currentLength = length(currentString$)
-
-# Iterative L-system expansion
 for iter from 1 to iterations
-    nextString$ = ""
-    
-    # Process each character in current string
-    for charPos from 1 to currentLength
-        char$ = mid$(currentString$, charPos, 1)
-        
-        # Apply rewrite rules
-        if char$ = "G"
-            replacement$ = rule_G$
-        elsif char$ = "S"
-            replacement$ = rule_S$
-        elsif char$ = "U"
-            replacement$ = rule_U$
-        elsif char$ = "D"
-            replacement$ = rule_D$
-        elsif char$ = "N"
-            replacement$ = rule_N$
-        else
-            # Unknown symbol - keep as is (no-op)
-            replacement$ = char$
+    next_str$ = ""
+    for i from 1 to curr_len
+        char$ = mid$(curr_str$, i, 1)
+        rep$ = char$
+        if char$ == "G"
+            rep$ = rule_G$
+        elsif char$ == "S"
+            rep$ = rule_S$
+        elsif char$ == "U"
+            rep$ = rule_U$
+        elsif char$ == "D"
+            rep$ = rule_D$
+        elsif char$ == "N"
+            rep$ = rule_N$
         endif
-        
-        nextString$ = nextString$ + replacement$
+        next_str$ = next_str$ + rep$
     endfor
+    curr_str$ = next_str$
+    curr_len = length(curr_str$)
     
-    # Update for next iteration
-    currentString$ = nextString$
-    currentLength = length(currentString$)
-    
-    # Check length limit
-    if currentLength > maxStringLength
-        appendInfoLine: "WARNING: L-system string exceeded MaxStringLength (", maxStringLength, ")"
-        appendInfoLine: "         Truncating at iteration ", iter, " with length ", currentLength
-        currentString$ = left$(currentString$, maxStringLength)
-        currentLength = maxStringLength
-        goto DONE_LSYSTEM
+    if curr_len > maxStringLength
+        curr_str$ = left$(curr_str$, maxStringLength)
+        curr_len = maxStringLength
+        goto END_LSYSTEM
     endif
 endfor
+label END_LSYSTEM
 
-label DONE_LSYSTEM
+l_sys$ = curr_str$
+l_len = curr_len
 
-# Final L-system string
-lString$ = currentString$
-lStringLength = length(lString$)
-
-appendInfoLine: "L-system string generated:"
-appendInfoLine: "  Iterations: ", iterations
-appendInfoLine: "  Final length: ", lStringLength
-if lStringLength <= 200
-    appendInfoLine: "  String: ", lString$
-else
-    appendInfoLine: "  String (first 200 chars): ", left$(lString$, 200), "..."
-endif
-appendInfoLine: ""
-
-###############################################################################
-# 3. GRAIN DISCRETIZATION
-###############################################################################
-
-grainDur = grainDuration_ms / 1000.0
-numGrains = floor(duration / grainDur)
-
-# Ensure at least one grain
-if numGrains < 1
-    numGrains = 1
+# --- 4. Grain Schedule ---
+grain_dur_sec = grainDuration_ms / 1000
+n_grains = floor(dur / grain_dur_sec)
+if n_grains < 1
+    n_grains = 1
 endif
 
-appendInfoLine: "Grain configuration:"
-appendInfoLine: "  Grain duration: ", fixed$(grainDur * 1000, 1), " ms"
-appendInfoLine: "  Number of grains: ", numGrains
-appendInfoLine: ""
+id_table = Create Table with column names: "schedule", n_grains, 
+    ... "idx symbol tStart tEnd tCenter pitchShift play"
 
-###############################################################################
-# 4. BUILD CUMULATIVE PITCH SCHEDULE (U/D affect NEXT grain)
-###############################################################################
+cum_pitch = basePitchShift_semitones
+appendInfoLine: "Building Grain Schedule (", n_grains, " grains)..."
 
-appendInfoLine: "Building cumulative pitch modulation..."
-
-# Create arrays for grain info
-cumPitch = basePitchShift_semitones
-minPitchReached = cumPitch
-maxPitchReached = cumPitch
-
-# Create a table to store grain information
-grainTable = Create Table with column names: "grainInfo", numGrains,
-    ... "grainIndex symbol tStart tEnd tCenter cumPitch playGrain"
-
-# Process each grain and determine pitch/playback behavior
-for k from 1 to numGrains
-    # Map grain index to L-system symbol (cyclic if needed)
-    symbolIndex = ((k - 1) mod lStringLength) + 1
-    symbol$ = mid$(lString$, symbolIndex, 1)
+for k from 1 to n_grains
+    sym_idx = ((k - 1) mod l_len) + 1
+    sym$ = mid$(l_sys$, sym_idx, 1)
     
-    # Calculate grain time boundaries
-    tStart = startTime + (k - 1) * grainDur
-    tEnd = tStart + grainDur
-    if tEnd > endTime
-        tEnd = endTime
+    t1 = start_t + (k - 1) * grain_dur_sec
+    t2 = t1 + grain_dur_sec
+    if t2 > end_t
+        t2 = end_t
     endif
-    tCenter = (tStart + tEnd) / 2
+    tc = (t1 + t2) / 2
     
-    # Use CURRENT cumPitch for this grain (before updating)
-    grainPitch = cumPitch
+    this_pitch = cum_pitch
     
-    # Then update cumPitch based on symbol for NEXT grain
-    if symbol$ = "U"
-        cumPitch = cumPitch + pitchStep_semitones
-    elsif symbol$ = "D"
-        cumPitch = cumPitch - pitchStep_semitones
-    elsif symbol$ = "N"
-        # No change
-    elsif symbol$ = "G"
-        # No pitch change for G (gating control only)
-    elsif symbol$ = "S"
-        # No pitch change for S (gating control only)
+    if sym$ == "U"
+        cum_pitch = cum_pitch + pitchStep_semitones
+    elsif sym$ == "D"
+        cum_pitch = cum_pitch - pitchStep_semitones
     endif
     
-    # Clamp pitch to max range
-    if cumPitch > maxPitchShift_semitones
-        cumPitch = maxPitchShift_semitones
-    elsif cumPitch < -maxPitchShift_semitones
-        cumPitch = -maxPitchShift_semitones
+    if cum_pitch > maxPitchShift_semitones
+        cum_pitch = maxPitchShift_semitones
+    elsif cum_pitch < -maxPitchShift_semitones
+        cum_pitch = -maxPitchShift_semitones
     endif
     
-    # Track min/max
-    if grainPitch < minPitchReached
-        minPitchReached = grainPitch
-    endif
-    if grainPitch > maxPitchReached
-        maxPitchReached = grainPitch
+    do_play = 1
+    if sym$ == "S"
+        do_play = 0
     endif
     
-    # Determine if grain should be played (G, U, D, N) or skipped (S)
-    if symbol$ = "S"
-        playGrain = 0
-    else
-        playGrain = 1
-    endif
-    
-    # Store in table
-    selectObject: grainTable
-    Set numeric value: k, "grainIndex", k
-    Set string value: k, "symbol", symbol$
-    Set numeric value: k, "tStart", tStart
-    Set numeric value: k, "tEnd", tEnd
-    Set numeric value: k, "tCenter", tCenter
-    Set numeric value: k, "cumPitch", grainPitch
-    Set numeric value: k, "playGrain", playGrain
+    selectObject: id_table
+    Set numeric value: k, "idx", k
+    Set string value: k, "symbol", sym$
+    Set numeric value: k, "tStart", t1
+    Set numeric value: k, "tEnd", t2
+    Set numeric value: k, "tCenter", tc
+    Set numeric value: k, "pitchShift", this_pitch
+    Set numeric value: k, "play", do_play
 endfor
 
-appendInfoLine: "Pitch modulation range:"
-appendInfoLine: "  Min pitch shift: ", fixed$(minPitchReached, 2), " semitones"
-appendInfoLine: "  Max pitch shift: ", fixed$(maxPitchReached, 2), " semitones"
-appendInfoLine: ""
+# --- 5. Pitch Processing ---
+appendInfoLine: "Applying Pitch Shifting..."
 
-###############################################################################
-# 5. PITCH MODIFICATION USING MANIPULATION OBJECT
-###############################################################################
+selectObject: id_sound
+id_manip = To Manipulation: 0.01, 75, 600
 
-appendInfoLine: "Applying pitch modification using Manipulation object..."
+selectObject: id_manip
+id_tier = Extract pitch tier
+selectObject: id_tier
+Remove points between: start_t, end_t
 
-selectObject: soundID
+selectObject: id_sound
+id_ref_pitch = To Pitch: 0.01, 75, 600
 
-# Create Manipulation object
-manipID = To Manipulation: 0.01, 75, 600
-
-# Extract PitchTier
-selectObject: manipID
-pitchTierID = Extract pitch tier
-
-# Clear existing points and add new ones based on cumulative pitch
-selectObject: pitchTierID
-Remove points between: startTime, endTime
-
-# Get original pitch to use as base
-selectObject: soundID
-pitchID = To Pitch: 0.01, 75, 600
-
-# Add pitch points for each grain
-for k from 1 to numGrains
-    selectObject: grainTable
-    tCenter = Get value: k, "tCenter"
-    cumPitch = Get value: k, "cumPitch"
+for k from 1 to n_grains
+    selectObject: id_table
+    tc = Get value: k, "tCenter"
+    shift = Get value: k, "pitchShift"
     
-    # Get original pitch at this time
-    selectObject: pitchID
-    origPitch = Get value at time: tCenter, "Hertz", "Linear"
-    
-    # If pitch is undefined, use a default (e.g., 200 Hz for average voice)
-    if origPitch = undefined
-        origPitch = 200
+    selectObject: id_ref_pitch
+    f_orig = Get value at time: tc, "Hertz", "Linear"
+    if f_orig = undefined
+        f_orig = 150
     endif
     
-    # Calculate target pitch
-    pitchFactor = 2 ^ (cumPitch / 12)
-    targetPitch = origPitch * pitchFactor
+    f_target = f_orig * (2 ^ (shift / 12))
     
-    # Add point to PitchTier
-    selectObject: pitchTierID
-    Add point: tCenter, targetPitch
+    selectObject: id_tier
+    Add point: tc, f_target
 endfor
 
-# Replace PitchTier in Manipulation
-selectObject: manipID
-plusObject: pitchTierID
+selectObject: id_manip
+plusObject: id_tier
 Replace pitch tier
 
-# Resynthesize
-selectObject: manipID
-resynthSound = Get resynthesis (overlap-add)
-Rename: soundName$ + "_pitched"
+selectObject: id_manip
+id_resynth = Get resynthesis (overlap-add)
+Rename: name$ + "_pitched"
 
-# Clean up intermediate objects
-removeObject: pitchID, pitchTierID, manipID
+removeObject: id_manip, id_tier, id_ref_pitch
 
-appendInfoLine: "Pitch modification complete."
-appendInfoLine: ""
+# --- 6. Granular Gating ---
+selectObject: id_resynth
+id_out = Copy: name$ + "_LSystem"
+channels = Get number of channels
 
-###############################################################################
-# 6. GRAIN GATING (Apply G/S patterns to pitched sound)
-###############################################################################
+fade_time = min(grain_dur_sec / 4, 0.005)
 
-appendInfoLine: "Applying grain gating (G=play, S=skip)..."
+appendInfoLine: "Applying Granular Gating..."
 
-# Start with the pitched sound
-selectObject: resynthSound
-outputSound = Copy: soundName$ + "_LSystemGranular"
-
-# Get number of channels in output
-selectObject: outputSound
-outputChannels = Get number of channels
-
-# Process each grain - gate directly using Formula (part)
-for k from 1 to numGrains
-    selectObject: grainTable
-    tStart = Get value: k, "tStart"
-    tEnd = Get value: k, "tEnd"
-    playGrain = Get value: k, "playGrain"
-    symbol$ = Get value: k, "symbol"
+for k from 1 to n_grains
+    selectObject: id_table
+    t1 = Get value: k, "tStart"
+    t2 = Get value: k, "tEnd"
+    play = Get value: k, "play"
     
-    # Ensure tEnd doesn't exceed sound duration
-    if tEnd > endTime
-        tEnd = endTime
-    endif
-    
-    grainLength = tEnd - tStart
-    if grainLength <= 0
-        goto NEXT_GRAIN
-    endif
-    
-    # Determine gain based on symbol
-    if playGrain = 1
-        # G, U, D, N - play the grain at repeatGain
-        grainGain = repeatGain
-    else
-        # S - skip (mute or use baseSkipGain)
-        grainGain = baseSkipGain
-    endif
-    
-    # Apply gain to this grain region (all channels)
-    selectObject: outputSound
-    Formula (part): tStart, tEnd, 1, outputChannels, "self * " + string$(grainGain)
-    
-    # Apply crossfade/windowing if overlap is enabled and grain is playing
-    if grainOverlap = 1 and playGrain = 1
-        selectObject: outputSound
-        fadeDur = min(grainLength / 4, 0.005)
-        if fadeDur > 0
-            # Fade in at grain start
-            Formula (part): tStart, tStart + fadeDur, 1, outputChannels, 
-                ... "self * ((x - " + string$(tStart) + ") / " + string$(fadeDur) + ")"
-            # Fade out at grain end
-            fadeStartTime = tEnd - fadeDur
-            Formula (part): fadeStartTime, tEnd, 1, outputChannels, 
-                ... "self * ((" + string$(tEnd) + " - x) / " + string$(fadeDur) + ")"
+    len = t2 - t1
+    if len > 0
+        gain = baseSkipGain
+        if play == 1
+            gain = repeatGain
         endif
+        
+        # Build optimized formula (Robust Syntax)
+        form$ = "self * " + string$(gain)
+        
+        if grainOverlap and play
+             # Fade In
+             t_fade_in_end = t1 + fade_time
+             form$ = form$ + " * (if x < " + string$(t_fade_in_end) + " then (x - " + string$(t1) + ") / " + string$(fade_time) + " else 1 fi)"
+             
+             # Fade Out
+             t_fade_out_start = t2 - fade_time
+             form$ = form$ + " * (if x > " + string$(t_fade_out_start) + " then (" + string$(t2) + " - x) / " + string$(fade_time) + " else 1 fi)"
+        endif
+        
+        selectObject: id_out
+        Formula (part): t1, t2, 1, channels, form$
     endif
     
-    label NEXT_GRAIN
-endfor
-
-appendInfoLine: "Grain gating complete."
-appendInfoLine: ""
-
-###############################################################################
-# 7. CLEANUP AND OUTPUT
-###############################################################################
-
-# Clean up intermediate objects
-removeObject: grainTable, resynthSound
-
-# Select output sound
-selectObject: outputSound
-
-appendInfoLine: "=== Processing Complete ==="
-appendInfoLine: "Output sound: ", soundName$, "_LSystemGranular"
-appendInfoLine: ""
-
-# Show statistics
-countG = 0
-countS = 0
-countU = 0
-countD = 0
-countN = 0
-countOther = 0
-
-for i from 1 to lStringLength
-    char$ = mid$(lString$, i, 1)
-    if char$ = "G"
-        countG = countG + 1
-    elsif char$ = "S"
-        countS = countS + 1
-    elsif char$ = "U"
-        countU = countU + 1
-    elsif char$ = "D"
-        countD = countD + 1
-    elsif char$ = "N"
-        countN = countN + 1
-    else
-        countOther = countOther + 1
+    # FIX: Replaced 'ceil' with 'ceiling'
+    if k mod ceiling(n_grains/10) = 0
+        p = round(k / n_grains * 100)
+        appendInfoLine: "... " + string$(p) + "%"
     endif
 endfor
 
-appendInfoLine: "L-system symbol statistics:"
-appendInfoLine: "  G (play): ", countG, " (", fixed$(100 * countG / lStringLength, 1), "%)"
-appendInfoLine: "  S (skip): ", countS, " (", fixed$(100 * countS / lStringLength, 1), "%)"
-appendInfoLine: "  U (pitch up next): ", countU, " (", fixed$(100 * countU / lStringLength, 1), "%)"
-appendInfoLine: "  D (pitch down next): ", countD, " (", fixed$(100 * countD / lStringLength, 1), "%)"
-appendInfoLine: "  N (neutral): ", countN, " (", fixed$(100 * countN / lStringLength, 1), "%)"
-if countOther > 0
-    appendInfoLine: "  Other: ", countOther
-endif
-appendInfoLine: ""
-appendInfoLine: "=== Symbol Semantics ==="
-appendInfoLine: "  G = Play grain (gate ON with RepeatGain)"
-appendInfoLine: "  S = Skip grain (gate OFF or BaseSkipGain)"
-appendInfoLine: "  U = Increase pitch of NEXT grain by PitchStep"
-appendInfoLine: "  D = Decrease pitch of NEXT grain by PitchStep"
-appendInfoLine: "  N = Neutral (no pitch change for next grain)"
-appendInfoLine: ""
+# --- 7. Cleanup ---
+removeObject: id_table, id_resynth
+selectObject: id_out
 appendInfoLine: "Done!"
 Play
