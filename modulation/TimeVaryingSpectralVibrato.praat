@@ -19,210 +19,147 @@
 #   https://github.com/ShaiCohen-ops/Praat-plugin_AudioTools
 # ============================================================
 
-clearinfo
+form Time-Varying Vibrato
+    comment --- Presets ---
+    optionmenu Preset 1
+        option Custom (Use settings below)
+        option Ramp Up (Accelerating)
+        option Slow Down (Decelerating)
+        option Swell (Fade-In Depth)
+        option Fade Out (Dying Wobble)
+        option Nervous Shiver (Fast & Shallow)
+        option Opera Finale (Wide & Slowing)
+    
+    comment --- Rate Evolution (Hz) ---
+    positive Start_Rate_Hz 4.0
+    positive End_Rate_Hz 8.0
+    
+    comment --- Depth Evolution (Semitones) ---
+    positive Start_Depth_ST 0.1
+    positive End_Depth_ST 0.1
+    
+    comment --- Output ---
+    boolean Play_after_processing 1
+endform
 
+# Check for selection
 if not selected("Sound")
     exitScript: "Please select a Sound object first."
 endif
 
-appendInfoLine: "=== TIME-DEPENDENT SPECTRAL VIBRATO ==="
-originalSound = selected("Sound")
-originalName$ = selected$("Sound")
+# ============================================================
+# SAFETY: RENAME SOUND
+# ============================================================
+original_sound_id = selected("Sound")
+original_name$ = selected$("Sound")
+selectObject: original_sound_id
+Rename: "SourceAudio_Temp"
 
-selectObject: originalSound
+# ============================================================
+# PRESET LOGIC
+# ============================================================
+
+if preset = 2
+    # Ramp Up (Accelerating)
+    start_Rate_Hz = 2.0
+    end_Rate_Hz = 10.0
+    start_Depth_ST = 0.2
+    end_Depth_ST = 0.2
+
+elsif preset = 3
+    # Slow Down (Engine failure)
+    start_Rate_Hz = 12.0
+    end_Rate_Hz = 0.5
+    start_Depth_ST = 0.3
+    end_Depth_ST = 0.5
+
+elsif preset = 4
+    # Swell (Fade-In)
+    start_Rate_Hz = 5.0
+    end_Rate_Hz = 5.0
+    start_Depth_ST = 0.0
+    end_Depth_ST = 1.0
+
+elsif preset = 5
+    # Fade Out (Calming down)
+    start_Rate_Hz = 6.0
+    end_Rate_Hz = 3.0
+    start_Depth_ST = 0.5
+    end_Depth_ST = 0.0
+
+elsif preset = 6
+    # Nervous Shiver
+    start_Rate_Hz = 8.0
+    end_Rate_Hz = 12.0
+    start_Depth_ST = 0.1
+    end_Depth_ST = 0.1
+
+elsif preset = 7
+    # Opera Finale
+    start_Rate_Hz = 5.5
+    end_Rate_Hz = 4.0
+    start_Depth_ST = 0.3
+    end_Depth_ST = 1.5
+endif
+
+# ============================================================
+# PSOLA ANALYSIS
+# ============================================================
+
+selectObject: original_sound_id
 duration = Get total duration
-appendInfoLine: "Duration: ", fixed$(duration, 3), " seconds"
 
-selectObject: originalSound
-To Pitch: 0, 75, 600
-pitchObject = selected("Pitch")
-
-numAnalysisPoints = 8
-analysisTimes# = zero#(numAnalysisPoints)
-depths# = zero#(numAnalysisPoints)
-rates# = zero#(numAnalysisPoints)
-
-appendInfoLine: newline$, "=== ANALYZING ", numAnalysisPoints, " TIME WINDOWS ==="
-
-for point from 1 to numAnalysisPoints
-    analysisTimes#[point] = (point - 1) * duration / (numAnalysisPoints - 1)
-    
-    if analysisTimes#[point] < 0.1
-        analysisTimes#[point] = 0.1
-    endif
-    if analysisTimes#[point] > duration - 0.2
-        analysisTimes#[point] = duration - 0.2
-    endif
-    
-    beginTime = analysisTimes#[point] - 0.1
-    endTime = analysisTimes#[point] + 0.1
-    
-    if beginTime < 0
-        beginTime = 0
-    endif
-    if endTime > duration
-        endTime = duration
-    endif
-    
-    selectObject: originalSound
-    windowSound = Extract part: beginTime, endTime, "Hamming", 1, "no"
-    
-    selectObject: windowSound
-    To Spectrum: "yes"
-    spectrum = selected("Spectrum")
-    
-    minFreq = 80
-    maxFreq = 5000
-    lnSum = 0
-    linearSum = 0
-    validBins = 0
-    roughnessSum = 0
-    roughnessBins = 0
-    
-    selectObject: spectrum
-    nBins = Get number of bins
-    binWidth = Get bin width
-    
-    for bin from 1 to nBins
-        freq = (bin - 1) * binWidth
-        if freq >= minFreq and freq <= maxFreq
-            amp = Get real value in bin: bin
-            power = amp * amp
-            power = max(power, 1e-12)
-            lnSum = lnSum + ln(power)
-            linearSum = linearSum + power
-            
-            if bin > 1 and bin < nBins
-                ampPrev = Get real value in bin: bin-1
-                ampNext = Get real value in bin: bin+1
-                roughnessSum = roughnessSum + abs(amp - (ampPrev + ampNext)/2)
-                roughnessBins = roughnessBins + 1
-            endif
-            
-            validBins = validBins + 1
-        endif
-    endfor
-    
-    if validBins > 0 and roughnessBins > 0
-        flatness = exp(lnSum / validBins) / (linearSum / validBins)
-        roughness = roughnessSum / roughnessBins
-    else
-        flatness = 0.2
-        roughness = 0.02
-    endif
-    
-    depths#[point] = 0.1 + (flatness * 0.2)
-    roughness_scaled = min(roughness * 50, 1)
-    rates#[point] = 4.0 + (roughness_scaled * 1.5)
-    
-    appendInfoLine: "Window ", point, " (", fixed$(analysisTimes#[point], 2), "s) - ",
-      ... "Flatness: ", fixed$(flatness, 3), ", Depth: ", fixed$(depths#[point], 3), ", Rate: ", fixed$(rates#[point], 2)
-    
-    selectObject: windowSound, spectrum
-    Remove
-endfor
-
-appendInfoLine: newline$, "=== APPLYING TIME-DEPENDENT VIBRATO ==="
-
-selectObject: originalSound
+# 1. Create Manipulation Object (The engine for pitch shifting)
 To Manipulation: 0.01, 75, 600
-manipulation = selected("Manipulation")
+manip_id = selected("Manipulation")
 
-selectObject: manipulation
+# 2. Extract PitchTier (The curve we will modify)
 Extract pitch tier
-originalPitchTier = selected("PitchTier")
+pitch_tier_id = selected("PitchTier")
 
-vibratoPitchTier = Create PitchTier: "time_varying_vibrato", 0, duration
+# ============================================================
+# APPLY TIME-VARYING VIBRATO
+# ============================================================
 
-timeStep = 0.01
-numGridPoints = round(duration / timeStep) + 1
+# We use the Chirp formula logic to handle changing rates properly.
+# Phase = Integral(Rate) = Start_Rate*t + 0.5*Acceleration*t^2
 
-appendInfoLine: "Creating ", numGridPoints, " uniform grid points..."
+rate_slope = (end_Rate_Hz - start_Rate_Hz) / duration
+depth_slope = (end_Depth_ST - start_Depth_ST) / duration
 
-currentPhase = 0
-previousTime = 0
-previousRate = rates#[1]
+selectObject: pitch_tier_id
 
-for i from 1 to numGridPoints
-    currentTime = (i - 1) * timeStep
-    
-    selectObject: originalPitchTier
-    originalFreq = Get value at time: currentTime
-    
-    if originalFreq > 0
-        segment = 1
-        for p from 1 to numAnalysisPoints - 1
-            if currentTime >= analysisTimes#[p] and currentTime <= analysisTimes#[p + 1]
-                segment = p
-                goto foundSegment
-            endif
-        endfor
-        
-        if currentTime < analysisTimes#[1]
-            segment = 1
-        else
-            segment = numAnalysisPoints - 1
-        endif
-        
-        label foundSegment
-        
-        segmentStart = analysisTimes#[segment]
-        segmentEnd = analysisTimes#[segment + 1]
-        
-        if segmentStart = segmentEnd
-            progress = 0
-        else
-            progress = (currentTime - segmentStart) / (segmentEnd - segmentStart)
-        endif
-        
-        currentDepth = depths#[segment] + progress * (depths#[segment + 1] - depths#[segment])
-        currentRate = rates#[segment] + progress * (rates#[segment + 1] - rates#[segment])
-        
-        if i > 1
-            timeDelta = currentTime - previousTime
-            averageRate = (previousRate + currentRate) / 2
-            phaseDelta = 2 * pi * averageRate * timeDelta
-            currentPhase = currentPhase + phaseDelta
-        else
-            currentPhase = 0
-        endif
-        
-        semitoneVariation = currentDepth * sin(currentPhase)
-        freqMultiplier = 2^(semitoneVariation / 12)
-        newFreq = originalFreq * freqMultiplier
-        
-        selectObject: vibratoPitchTier
-        Add point: currentTime, newFreq
-        
-        previousTime = currentTime
-        previousRate = currentRate
-    endif
-    
-    if i mod 100 = 0
-        appendInfoLine: "Processed ", i, "/", numGridPoints, " grid points"
-    endif
-endfor
+# Apply the complex modulation formula to the PitchTier
+# 1. Calculate instantaneous Depth: (Start + Slope*x)
+# 2. Calculate instantaneous Phase: 2*pi * (Start*x + 0.5*Slope*x^2)
+# 3. Convert semitones to ratio: 2 ^ (semitones / 12)
+# 4. Multiply original pitch (self) by this ratio
 
-selectObject: manipulation
-plusObject: vibratoPitchTier
+Formula: "self * 2 ^ ( (start_Depth_ST + depth_slope * x) * sin(2*pi * (start_Rate_Hz * x + 0.5 * rate_slope * x^2)) / 12 )"
+
+# ============================================================
+# RESYNTHESIS
+# ============================================================
+
+selectObject: manip_id
+plusObject: pitch_tier_id
 Replace pitch tier
 
-selectObject: manipulation
-finalSound = Get resynthesis (overlap-add)
-Rename: "time_varying_vibrato_" + originalName$
+selectObject: manip_id
+Get resynthesis (overlap-add)
+Rename: original_name$ + "_time_vibrato"
+final_id = selected("Sound")
 
-appendInfoLine: newline$, "Time-dependent vibrato applied successfully!"
-appendInfoLine: "Final sound: ", selected$("Sound")
+# ============================================================
+# CLEANUP
+# ============================================================
 
-appendInfoLine: newline$, "=== VIBRATO EVOLUTION ==="
-for point from 1 to numAnalysisPoints
-    appendInfoLine: "Time ", fixed$(analysisTimes#[point], 2), "s - ",
-      ... "Depth: ", fixed$(depths#[point], 3), " st, Rate: ", fixed$(rates#[point], 2), " Hz"
-endfor
-Play
+removeObject: manip_id
+removeObject: pitch_tier_id
+selectObject: original_sound_id
+Rename: original_name$
 
-selectObject: pitchObject, manipulation, originalPitchTier, vibratoPitchTier
-Remove
-
-selectObject: finalSound
-appendInfoLine: newline$, "=== COMPLETE ==="
+selectObject: final_id
+if play_after_processing
+    Play
+endif
