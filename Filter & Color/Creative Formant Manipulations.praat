@@ -19,8 +19,9 @@
 #   https://github.com/ShaiCohen-ops/Praat-plugin_AudioTools
 # ============================================================
 
-# Creative Formant Manipulations
-# Various transformations using FormantPath and FormantGrid
+# Creative Formant Manipulations (v2.4 - Array Bounds Fixed)
+# Fixes: "Undefined variable" crash in Crossfade section.
+# Uses LPC Source-Filter model for clean results.
 
 form Creative Formant Manipulations
     comment Select manipulation type:
@@ -32,407 +33,275 @@ form Creative Formant Manipulations
         option Formant LFO modulation
         option Formant crossfade (temporal blend)
         option Formant freezing (hold vowels)
-    comment FormantPath Parameters
+    
+    comment --- Analysis Parameters ---
     positive Time_step_(s) 0.005
     positive Max_number_of_formants 5
     positive Maximum_formant_(Hz) 5500
     positive Window_length_(s) 0.025
     positive Pre_emphasis_from_(Hz) 50
-    positive Formant_smoothing_bandwidth 0.05
-    positive Relative_formant_bandwidth 4
-    comment Manipulation-specific parameters
-    comment For Formant rotation:
-    positive Rotation_amount_(semitones) 3
-    comment For Formant scaling:
-    positive Formant_shift_ratio 0.8
-    positive Formant_stretch_ratio 1.2
-    comment For Formant LFO:
-    positive LFO_rate_Hz 2
-    positive LFO_depth_semitones 6
-    comment For Formant crossfade:
+    
+    comment --- Effect Parameters ---
+    comment [Rotation] Semitones shift:
+    real Rotation_amount 3.0
+    
+    comment [Scaling] Freq ratio / BW ratio:
+    real Formant_shift_ratio 0.8
+    real Formant_stretch_ratio 1.2
+    
+    comment [LFO] Rate (Hz) / Depth (semitones):
+    positive LFO_rate_Hz 2.0
+    positive LFO_depth_semitones 6.0
+    
+    comment [Crossfade] Number of cycles:
     positive Crossfade_cycles 3
-    comment For Formant freezing:
-    positive Freeze_interval_(s) 0.3
-    positive Freeze_duration_(s) 0.15
-    comment Cleanup
-    boolean Keep_intermediate_objects 0
+    
+    comment [Freeze] Interval (s) / Duration (s):
+    positive Freeze_interval 0.3
+    positive Freeze_duration 0.15
+    
+    boolean Play_result 1
 endform
 
 # Get selected sound
+if numberOfSelected("Sound") <> 1
+    exitScript: "Please select exactly one Sound object."
+endif
+
 sound = selected("Sound")
 soundName$ = selected$("Sound")
-duration = Get total duration
-samplingFrequency = Get sampling frequency
+dur = Get total duration
+sr = Get sampling frequency
 
-writeInfoLine: "Creative Formant Manipulation"
-appendInfoLine: "=============================="
-appendInfoLine: "Processing: ", soundName$
-appendInfoLine: "Type: ", manipulation_type$
-appendInfoLine: ""
+# 1. PREPARE SOURCE (The "Buzz")
+writeInfoLine: "--- Processing Pipeline ---"
+appendInfoLine: "[1/4] Extracting Source (LPC Inverse Filtering)..."
 
-# Create FormantPath
 selectObject: sound
-To FormantPath (burg): time_step, max_number_of_formants, maximum_formant, window_length, pre_emphasis_from, formant_smoothing_bandwidth, relative_formant_bandwidth
-formantPath = selected("FormantPath")
+# We use standard LPC Burg for the inverse filter to get the source
+lpc = To LPC (burg): max_number_of_formants, window_length, time_step, pre_emphasis_from
+plusObject: sound
+source = Filter (inverse)
+Rename: "source_excitation"
 
-# Extract Formant
-selectObject: formantPath
-Extract Formant
-formant = selected("Formant")
+# 2. ANALYZE FORMANTS (The "Filter")
+appendInfoLine: "[2/4] Analyzing Formants..."
+selectObject: sound
+# We use FormantPath for the smooth manipulation base
+fpath = To FormantPath (burg): time_step, max_number_of_formants, maximum_formant, window_length, pre_emphasis_from, 0.05, 4
+formant = Extract Formant
 
-# Get formant info
+# Store data in arrays (Caching for speed)
 selectObject: formant
 numFrames = Get number of frames
-startTime = Get time from frame number: 1
-endTime = Get time from frame number: numFrames
+firstTime = Get time from frame number: 1
 
-# Store frame times
-for frame to numFrames
-    selectObject: formant
-    frameTime[frame] = Get time from frame number: frame
+for i to numFrames
+    t[i] = Get time from frame number: i
+    nF[i] = Get number of formants: i
+    for f to nF[i]
+        val_f[i,f] = Get value at time: f, t[i], "hertz", "Linear"
+        val_b[i,f] = Get bandwidth at time: f, t[i], "hertz", "Linear"
+    endfor
 endfor
 
-# Down to FormantGrid
+# Convert to Grid for manipulation
 selectObject: formant
-Down to FormantGrid
-formantGrid = selected("FormantGrid")
+fgrid = Down to FormantGrid
 
-appendInfoLine: "Formants extracted: ", numFrames, " frames"
-appendInfoLine: ""
+# 3. APPLY MANIPULATIONS
+appendInfoLine: "[3/4] Applying Effect: ", manipulation_type$
 
-# ========================================
-# MANIPULATION 1: Formant Rotation (Vowel Morphing)
-# ========================================
+selectObject: fgrid
+
+# --- ROTATION ---
 if manipulation_type = 1
-    appendInfoLine: "Applying formant rotation..."
-    
-    # Extract formant frequencies
-    for frame to numFrames
-        time = frameTime[frame]
-        for f to max_number_of_formants
-            selectObject: formant
-            numFormants = Get number of formants: frame
-            if f <= numFormants
-                freq[frame, f] = Get value at time: f, time, "hertz", "Linear"
-            else
-                freq[frame, f] = undefined
-            endif
-        endfor
-    endfor
-    
-    # Rotate formants (shift all formants up/down in frequency)
-    rotationFactor = 2^(rotation_amount / 12)
-    
-    selectObject: formantGrid
-    for frame to numFrames
-        time = frameTime[frame]
-        for f to max_number_of_formants
-            if freq[frame, f] <> undefined
-                newFreq = freq[frame, f] * rotationFactor
-                if newFreq > 0 and newFreq < maximum_formant
-                    Remove formant points between: f, time - 0.0001, time + 0.0001
-                    Add formant point: f, time, newFreq
+    factor = 2^(rotation_amount / 12)
+    for i to numFrames
+        for f to nF[i]
+            hz = val_f[i,f]
+            if hz <> undefined
+                new_hz = hz * factor
+                if new_hz < maximum_formant
+                    Remove formant points between: f, t[i]-0.0001, t[i]+0.0001
+                    Add formant point: f, t[i], new_hz
                 endif
             endif
         endfor
     endfor
-    
-    resultName$ = soundName$ + "_formant_rotated"
-    appendInfoLine: "Formants rotated by ", rotation_amount, " semitones"
 
-# ========================================
-# MANIPULATION 2: Formant Reversal (Spectral Flip)
-# ========================================
+# --- REVERSAL (Spectral Flip) ---
 elsif manipulation_type = 2
-    appendInfoLine: "Reversing formant order..."
-    
-    # Extract formant frequencies
-    for frame to numFrames
-        time = frameTime[frame]
+    for i to numFrames
         for f to max_number_of_formants
-            selectObject: formant
-            numFormants = Get number of formants: frame
-            if f <= numFormants
-                freq[frame, f] = Get value at time: f, time, "hertz", "Linear"
-            else
-                freq[frame, f] = undefined
-            endif
-        endfor
-    endfor
-    
-    # Reverse formant order (F1 becomes F5, F2 becomes F4, etc.)
-    selectObject: formantGrid
-    for frame to numFrames
-        time = frameTime[frame]
-        for f to max_number_of_formants
-            reversedF = max_number_of_formants - f + 1
-            if freq[frame, reversedF] <> undefined and freq[frame, reversedF] > 0
-                Remove formant points between: f, time - 0.0001, time + 0.0001
-                Add formant point: f, time, freq[frame, reversedF]
-            endif
-        endfor
-    endfor
-    
-    resultName$ = soundName$ + "_formant_reversed"
-    appendInfoLine: "Formant order reversed (F1↔F5, F2↔F4, etc.)"
-
-# ========================================
-# MANIPULATION 3: Formant Scrambling
-# ========================================
-elsif manipulation_type = 3
-    appendInfoLine: "Scrambling formants..."
-    
-    # Extract formant frequencies
-    for frame to numFrames
-        time = frameTime[frame]
-        for f to max_number_of_formants
-            selectObject: formant
-            numFormants = Get number of formants: frame
-            if f <= numFormants
-                freq[frame, f] = Get value at time: f, time, "hertz", "Linear"
-            else
-                freq[frame, f] = undefined
-            endif
-        endfor
-    endfor
-    
-    # Randomly shuffle formants at each frame
-    selectObject: formantGrid
-    for frame to numFrames
-        time = frameTime[frame]
-        
-        # Create random permutation
-        for f to max_number_of_formants
-            perm[f] = f
-        endfor
-        
-        # Fisher-Yates shuffle
-        for i from max_number_of_formants to 2
-            j = randomInteger(1, i)
-            temp = perm[i]
-            perm[i] = perm[j]
-            perm[j] = temp
-        endfor
-        
-        # Apply scrambled formants
-        for f to max_number_of_formants
-            scrambledF = perm[f]
-            if freq[frame, scrambledF] <> undefined and freq[frame, scrambledF] > 0
-                Remove formant points between: f, time - 0.0001, time + 0.0001
-                Add formant point: f, time, freq[frame, scrambledF]
-            endif
-        endfor
-    endfor
-    
-    resultName$ = soundName$ + "_formant_scrambled"
-    appendInfoLine: "Formants randomly scrambled at each frame"
-
-# ========================================
-# MANIPULATION 4: Formant Scaling (Gender Shift)
-# ========================================
-elsif manipulation_type = 4
-    appendInfoLine: "Scaling formants for gender shift..."
-    
-    # Extract formant frequencies and bandwidths
-    for frame to numFrames
-        time = frameTime[frame]
-        for f to max_number_of_formants
-            selectObject: formant
-            numFormants = Get number of formants: frame
-            if f <= numFormants
-                freq[frame, f] = Get value at time: f, time, "hertz", "Linear"
-                bw[frame, f] = Get bandwidth at time: f, time, "hertz", "Linear"
-            else
-                freq[frame, f] = undefined
-                bw[frame, f] = undefined
-            endif
-        endfor
-    endfor
-    
-    # Scale formants
-    selectObject: formantGrid
-    for frame to numFrames
-        time = frameTime[frame]
-        for f to max_number_of_formants
-            if freq[frame, f] <> undefined and freq[frame, f] > 0
-                newFreq = freq[frame, f] * formant_shift_ratio
-                newBW = bw[frame, f] * formant_stretch_ratio
-                if newFreq > 0 and newFreq < maximum_formant
-                    Remove formant points between: f, time - 0.0001, time + 0.0001
-                    Add formant point: f, time, newFreq
-                    Remove bandwidth points between: f, time - 0.0001, time + 0.0001
-                    Add bandwidth point: f, time, newBW
-                endif
-            endif
-        endfor
-    endfor
-    
-    resultName$ = soundName$ + "_gender_shifted"
-    appendInfoLine: "Formants scaled: frequency × ", fixed$(formant_shift_ratio, 2), ", bandwidth × ", fixed$(formant_stretch_ratio, 2)
-
-# ========================================
-# MANIPULATION 5: Formant LFO Modulation
-# ========================================
-elsif manipulation_type = 5
-    appendInfoLine: "Applying LFO modulation to formants..."
-    
-    # Extract formant frequencies
-    for frame to numFrames
-        time = frameTime[frame]
-        for f to max_number_of_formants
-            selectObject: formant
-            numFormants = Get number of formants: frame
-            if f <= numFormants
-                freq[frame, f] = Get value at time: f, time, "hertz", "Linear"
-            else
-                freq[frame, f] = undefined
-            endif
-        endfor
-    endfor
-    
-    # Apply LFO modulation
-    selectObject: formantGrid
-    for frame to numFrames
-        time = frameTime[frame]
-        
-        # Calculate LFO value (sine wave)
-        lfoValue = sin(2 * pi * lFO_rate_Hz * time)
-        modulation = 2^((lfoValue * lFO_depth_semitones) / 12)
-        
-        for f to max_number_of_formants
-            if freq[frame, f] <> undefined and freq[frame, f] > 0
-                newFreq = freq[frame, f] * modulation
-                if newFreq > 0 and newFreq < maximum_formant
-                    Remove formant points between: f, time - 0.0001, time + 0.0001
-                    Add formant point: f, time, newFreq
-                endif
-            endif
-        endfor
-    endfor
-    
-    resultName$ = soundName$ + "_formant_LFO"
-    appendInfoLine: "LFO applied: ", lFO_rate_Hz, " Hz, depth ", lFO_depth_semitones, " semitones"
-
-# ========================================
-# MANIPULATION 6: Formant Crossfade (Temporal Blend)
-# ========================================
-elsif manipulation_type = 6
-    appendInfoLine: "Creating formant crossfade..."
-    
-    # Extract formant frequencies
-    for frame to numFrames
-        time = frameTime[frame]
-        for f to max_number_of_formants
-            selectObject: formant
-            numFormants = Get number of formants: frame
-            if f <= numFormants
-                freq[frame, f] = Get value at time: f, time, "hertz", "Linear"
-            else
-                freq[frame, f] = undefined
-            endif
-        endfor
-    endfor
-    
-    # Crossfade between beginning and end formants
-    selectObject: formantGrid
-    for frame to numFrames
-        time = frameTime[frame]
-        
-        # Calculate crossfade position (cycling)
-        cyclePosition = (time / duration) * crossfade_cycles
-        fadeAmount = (sin(cyclePosition * 2 * pi) + 1) / 2
-        
-        for f to max_number_of_formants
-            startFreq = freq[1, f]
-            endFreq = freq[numFrames, f]
+            # Map F1->F5, F2->F4, etc.
+            src_f = max_number_of_formants - f + 1
             
-            if startFreq <> undefined and endFreq <> undefined and startFreq > 0 and endFreq > 0
-                blendedFreq = startFreq * (1 - fadeAmount) + endFreq * fadeAmount
-                Remove formant points between: f, time - 0.0001, time + 0.0001
-                Add formant point: f, time, blendedFreq
+            # Safety check if source formant exists
+            if src_f <= nF[i]
+                hz = val_f[i, src_f]
+                bw = val_b[i, src_f]
+                
+                if hz <> undefined
+                    Remove formant points between: f, t[i]-0.0001, t[i]+0.0001
+                    Add formant point: f, t[i], hz
+                    # Swap bandwidths to prevent whistling
+                    Remove bandwidth points between: f, t[i]-0.0001, t[i]+0.0001
+                    Add bandwidth point: f, t[i], bw
+                endif
             endif
         endfor
     endfor
-    
-    resultName$ = soundName$ + "_formant_crossfade"
-    appendInfoLine: "Crossfading between start and end formants, ", crossfade_cycles, " cycles"
 
-# ========================================
-# MANIPULATION 7: Formant Freezing
-# ========================================
-elsif manipulation_type = 7
-    appendInfoLine: "Freezing formants at intervals..."
-    
-    # Extract formant frequencies
-    for frame to numFrames
-        time = frameTime[frame]
+# --- SCRAMBLING ---
+elsif manipulation_type = 3
+    for i to numFrames
+        # Create shuffle array
+        for k to max_number_of_formants
+            perm[k] = k
+        endfor
+        
+        # Standard Shuffle
+        loop_count = max_number_of_formants - 1
+        for step from 1 to loop_count
+            k = max_number_of_formants - step + 1
+            r = randomInteger(1, k)
+            swap = perm[k]
+            perm[k] = perm[r]
+            perm[r] = swap
+        endfor
+        
         for f to max_number_of_formants
-            selectObject: formant
-            numFormants = Get number of formants: frame
-            if f <= numFormants
-                freq[frame, f] = Get value at time: f, time, "hertz", "Linear"
-            else
-                freq[frame, f] = undefined
+            src_f = perm[f]
+            if src_f <= nF[i]
+                hz = val_f[i, src_f]
+                bw = val_b[i, src_f]
+                if hz <> undefined
+                    Remove formant points between: f, t[i]-0.0001, t[i]+0.0001
+                    Add formant point: f, t[i], hz
+                    Remove bandwidth points between: f, t[i]-0.0001, t[i]+0.0001
+                    Add bandwidth point: f, t[i], bw
+                endif
             endif
         endfor
     endfor
-    
-    # Freeze formants at regular intervals
-    selectObject: formantGrid
-    currentTime = 0
-    while currentTime < duration
-        # Find frame to freeze
-        freezeFrame = round((currentTime / duration) * numFrames)
-        if freezeFrame < 1
-            freezeFrame = 1
-        endif
-        if freezeFrame > numFrames
-            freezeFrame = numFrames
+
+# --- SCALING ---
+elsif manipulation_type = 4
+    for i to numFrames
+        for f to nF[i]
+            hz = val_f[i,f]
+            bw = val_b[i,f]
+            if hz <> undefined
+                new_hz = hz * formant_shift_ratio
+                new_bw = bw * formant_stretch_ratio
+                if new_hz < maximum_formant
+                    Remove formant points between: f, t[i]-0.0001, t[i]+0.0001
+                    Add formant point: f, t[i], new_hz
+                    Remove bandwidth points between: f, t[i]-0.0001, t[i]+0.0001
+                    Add bandwidth point: f, t[i], new_bw
+                endif
+            endif
+        endfor
+    endfor
+
+# --- LFO ---
+elsif manipulation_type = 5
+    for i to numFrames
+        lfo_val = sin(2 * pi * lFO_rate_Hz * t[i])
+        mod_factor = 2^((lfo_val * lFO_depth_semitones) / 12)
+        
+        for f to nF[i]
+            hz = val_f[i,f]
+            if hz <> undefined
+                new_hz = hz * mod_factor
+                if new_hz < maximum_formant
+                    Remove formant points between: f, t[i]-0.0001, t[i]+0.0001
+                    Add formant point: f, t[i], new_hz
+                endif
+            endif
+        endfor
+    endfor
+
+# --- CROSSFADE ---
+elsif manipulation_type = 6
+    for i to numFrames
+        pos = (t[i] / dur) * crossfade_cycles
+        fade = (sin(pos * 2 * pi) + 1) / 2
+        for f to max_number_of_formants
+            # [FIX] Check if formant 'f' exists in Start AND End frames
+            # to prevent array out-of-bounds errors.
+            if f <= nF[1] and f <= nF[numFrames]
+                hz_start = val_f[1, f]
+                hz_end = val_f[numFrames, f]
+                
+                if hz_start <> undefined and hz_end <> undefined
+                    new_hz = hz_start * (1 - fade) + hz_end * fade
+                    Remove formant points between: f, t[i]-0.0001, t[i]+0.0001
+                    Add formant point: f, t[i], new_hz
+                endif
+            endif
+        endfor
+    endfor
+
+# --- FREEZING ---
+elsif manipulation_type = 7
+    # Pre-calculate freeze masks
+    curr_t = 0
+    while curr_t < dur
+        freeze_idx = round((curr_t / dur) * numFrames)
+        if freeze_idx < 1 
+            freeze_idx = 1 
         endif
         
-        # Apply frozen formants for freeze_duration
-        freezeStart = currentTime
-        freezeEnd = min(currentTime + freeze_duration, duration)
+        start_t = curr_t
+        end_t = min(curr_t + freeze_duration, dur)
         
-        for frame to numFrames
-            time = frameTime[frame]
-            if time >= freezeStart and time <= freezeEnd
+        start_frame = round((start_t / dur) * numFrames)
+        end_frame = round((end_t / dur) * numFrames)
+        
+        if start_frame < 1
+            start_frame = 1
+        endif
+        
+        for k from start_frame to end_frame
+            if k <= numFrames
+                time_k = t[k]
                 for f to max_number_of_formants
-                    if freq[freezeFrame, f] <> undefined and freq[freezeFrame, f] > 0
-                        Remove formant points between: f, time - 0.0001, time + 0.0001
-                        Add formant point: f, time, freq[freezeFrame, f]
-                    endif
+                     if f <= nF[freeze_idx]
+                        hz_freeze = val_f[freeze_idx, f]
+                        if hz_freeze <> undefined
+                            Remove formant points between: f, time_k-0.0001, time_k+0.0001
+                            Add formant point: f, time_k, hz_freeze
+                        endif
+                     endif
                 endfor
             endif
         endfor
-        
-        currentTime = currentTime + freeze_interval
+        curr_t = curr_t + freeze_interval
     endwhile
-    
-    resultName$ = soundName$ + "_formant_frozen"
-    appendInfoLine: "Formants frozen every ", freeze_interval, " s for ", freeze_duration, " s"
 endif
 
-# Apply FormantGrid to sound using filtering
-selectObject: sound
-plus formantGrid
-Filter
-result = selected("Sound")
-Rename: resultName$
+# 4. SYNTHESIS (Source + New Filter)
+appendInfoLine: "[4/4] Resynthesizing..."
 
-# Print summary
-appendInfoLine: ""
-appendInfoLine: "Processing complete!"
-appendInfoLine: "Output: ", resultName$
+selectObject: source
+plusObject: fgrid
+resynth = Filter
+Rename: soundName$ + "_mod"
+
+# Normalize
+selectObject: sound
+orig_int = Get intensity (dB)
+selectObject: resynth
+Scale intensity: orig_int
 
 # Cleanup
-if keep_intermediate_objects = 0
-    removeObject: formantPath
-    removeObject: formant
-    removeObject: formantGrid
-    appendInfoLine: ""
-    appendInfoLine: "Intermediate objects removed"
-endif
-Play
+removeObject: lpc, source, fpath, formant, fgrid
 
-selectObject: result
+appendInfoLine: "Done."
+
+if play_result
+    selectObject: resynth
+    Play
+endif
