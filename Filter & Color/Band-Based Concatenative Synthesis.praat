@@ -18,11 +18,12 @@
 #   Cohen, S. (2025). Praat AudioTools: An Offline Analysis–Resynthesis Toolkit for Experimental Composition.
 #   https://github.com/ShaiCohen-ops/Praat-plugin_AudioTools
 # ============================================================
-# Band-Based Concatenative Synthesis 
-# Select Source Sound (1) and Target Sound (2) before running
-# Optimized for speed while maintaining quality
 
-form Band-Based Concatenative Synthesis (Fast)
+# Band-Based Concatenative Synthesis (v2.5 - Stable)
+# Select Source Sound (1) and Target Sound (2) before running
+# Fixes: String concatenation syntax in 'Rename' command.
+
+form Band-Based Concatenative Synthesis (Final)
     comment === Presets ===
     choice Preset 1
         button Custom
@@ -34,7 +35,6 @@ form Band-Based Concatenative Synthesis (Fast)
     comment === Temporal Parameters ===
     positive Window_length_(s) 0.060
     positive Hop_size_(s) 0.030
-    positive Crossfade_duration_(s) 0.015
     comment === Frequency Bands (Hz, comma-separated) ===
     sentence Band_edges 0,500,500,1500,1500,4000,4000,10000
     comment === Matching Parameters ===
@@ -44,48 +44,67 @@ form Band-Based Concatenative Synthesis (Fast)
     positive Target_intensity_(dB) 70
 endform
 
-# Apply preset if not Custom
+# === Preset Logic ===
 if preset = 2
-    # Subtle Morph - smooth and natural
+    # Subtle Morph
     window_length = 0.080
     hop_size = 0.040
-    crossfade_duration = 0.020
     band_edges$ = "0,400,400,1200,1200,3500,3500,10000"
     continuity_weight_lambda = 0.5
     locality_window = 0.6
 elsif preset = 3
-    # Granular Texture - fast grains
+    # Granular Texture
     window_length = 0.040
     hop_size = 0.020
-    crossfade_duration = 0.010
     band_edges$ = "0,600,600,2000,2000,6000,6000,12000"
     continuity_weight_lambda = 0.15
     locality_window = 0.3
 elsif preset = 4
-    # Spectral Match - balanced
+    # Spectral Match
     window_length = 0.050
     hop_size = 0.025
-    crossfade_duration = 0.012
     band_edges$ = "0,300,300,1000,1000,3000,3000,8000"
     continuity_weight_lambda = 0.35
     locality_window = 0.4
 elsif preset = 5
-    # Rhythmic Mosaic - preserves rhythm
+    # Rhythmic Mosaic
     window_length = 0.100
     hop_size = 0.050
-    crossfade_duration = 0.025
     band_edges$ = "0,400,400,1200,1200,3500,3500,10000"
     continuity_weight_lambda = 0.7
     locality_window = 0.8
 elsif preset = 6
-    # Smooth Blend - very continuous
+    # Smooth Blend
     window_length = 0.120
     hop_size = 0.060
-    crossfade_duration = 0.030
     band_edges$ = "0,500,500,1500,1500,4500,4500,12000"
     continuity_weight_lambda = 0.6
     locality_window = 1.0
 endif
+
+# Determine preset name string for filename
+if preset = 1
+    preset_name$ = "Custom"
+elsif preset = 2
+    preset_name$ = "SubtleMorph"
+elsif preset = 3
+    preset_name$ = "GranularTexture"
+elsif preset = 4
+    preset_name$ = "SpectralMatch"
+elsif preset = 5
+    preset_name$ = "RhythmicMosaic"
+elsif preset = 6
+    preset_name$ = "SmoothBlend"
+endif
+
+# [OLA CONSTRAINT]
+ratio = window_length / hop_size
+int_ratio = round(ratio)
+if abs(ratio - int_ratio) > 0.01
+    hop_size = window_length / int_ratio
+    appendInfoLine: "⚠ Hop size adjusted to ", fixed$(hop_size, 4), " to fit window"
+endif
+num_streams = int_ratio
 
 # Check selection
 numberOfSelected = numberOfSelected("Sound")
@@ -93,7 +112,6 @@ if numberOfSelected <> 2
     exitScript: "Please select exactly 2 Sounds (Source and Target)"
 endif
 
-# Get selected sounds
 sound1 = selected("Sound", 1)
 sound2 = selected("Sound", 2)
 
@@ -109,69 +127,36 @@ target = sound2
 target_dur = Get total duration
 target_sr = Get sampling frequency
 
-# Determine preset name
-if preset = 1
-    preset_name$ = "Custom"
-elsif preset = 2
-    preset_name$ = "SubtleMorph"
-elsif preset = 3
-    preset_name$ = "GranularTexture"
-elsif preset = 4
-    preset_name$ = "SpectralMatch"
-elsif preset = 5
-    preset_name$ = "RhythmicMosaic"
-elsif preset = 6
-    preset_name$ = "SmoothBlend"
-endif
-
-writeInfoLine: "=== Band-Based Concatenative Synthesis (Fast) ==="
-appendInfoLine: "Preset: ", preset_name$
-appendInfoLine: "Source: ", source_name$, " (", fixed$(source_dur, 3), " s)"
-appendInfoLine: "Target: ", target_name$, " (", fixed$(target_dur, 3), " s)"
-appendInfoLine: ""
+writeInfoLine: "=== Band-Based Concatenative Synthesis (v2.5) ==="
+appendInfoLine: "Streams: ", num_streams
 
 # Safety checks
 if source_sr <> target_sr
     exitScript: "Sample rates must match. Please resample first."
 endif
 
-if 2 * crossfade_duration > window_length
-    crossfade_duration = window_length / 2.5
-    appendInfoLine: "⚠ Crossfade adjusted to ", fixed$(crossfade_duration*1000, 0), " ms"
-endif
-
-if target_dur < window_length
-    exitScript: "Target too short for window length"
-endif
-
 # Parse bands
 band_edges$ = band_edges$ + ","
 @countCommas: band_edges$
 num_bands = countCommas.result / 2
-
-if num_bands < 2
-    exitScript: "Need at least 2 bands"
-endif
-
-# Parse and validate bands
 nyquist = source_sr / 2
+
 for b from 1 to num_bands
     @extractPair: band_edges$, b
     band_low[b] = max(0, extractPair.low)
     band_high[b] = min(extractPair.high, nyquist)
-    
     if band_high[b] - band_low[b] < 50
         band_high[b] = min(band_low[b] + 50, nyquist)
     endif
 endfor
 
-appendInfoLine: "Bands: ", num_bands
-appendInfoLine: ""
+# ==============================================================================
+# 1. ANALYSIS
+# ==============================================================================
+appendInfoLine: "Analyzing..."
 
-# === Extract Target Features ===
-appendInfoLine: "Analyzing target..."
+# --- Analyze Target ---
 target_frames = floor((target_dur - window_length) / hop_size) + 1
-
 for b from 1 to num_bands
     selectObject: target
     target_band[b] = Filter (pass Hann band): band_low[b], band_high[b], 100
@@ -179,22 +164,15 @@ endfor
 
 for k from 1 to target_frames
     t_start = (k - 1) * hop_size
+    t_end = t_start + window_length
     for b from 1 to num_bands
         selectObject: target_band[b]
-        t_end = min(t_start + window_length, target_dur)
-        if t_end > t_start
-            temp = Extract part: t_start, t_end, "rectangular", 1.0, "no"
-            rms = Get root-mean-square: 0, 0
-            Remove
-            target_feature[k, b] = if rms > 0 then log10(rms + 1e-10) else -10 fi
-        else
-            target_feature[k, b] = -10
-        endif
+        rms = Get root-mean-square: t_start, t_end
+        target_feature[k, b] = if rms > 0 then log10(rms + 1e-10) else -10 fi
     endfor
 endfor
 
-# === Build Source Index ===
-appendInfoLine: "Indexing source..."
+# --- Analyze Source ---
 snippet_hop = hop_size / 2
 source_snippets = floor((source_dur - window_length) / snippet_hop) + 1
 
@@ -204,20 +182,24 @@ for b from 1 to num_bands
 endfor
 
 for j from 1 to source_snippets
-    snippet_start[j] = (j - 1) * snippet_hop
+    s_start = (j - 1) * snippet_hop
+    s_end = s_start + window_length
     for b from 1 to num_bands
         selectObject: source_band[b]
-        s_end = min(snippet_start[j] + window_length, source_dur)
-        if s_end > snippet_start[j]
-            temp = Extract part: snippet_start[j], s_end, "rectangular", 1.0, "no"
-            rms = Get root-mean-square: 0, 0
-            Remove
-            source_feature[j, b] = if rms > 0 then log10(rms + 1e-10) else -10 fi
-        else
-            source_feature[j, b] = -10
-        endif
+        rms = Get root-mean-square: s_start, s_end
+        source_feature[j, b] = if rms > 0 then log10(rms + 1e-10) else -10 fi
     endfor
 endfor
+
+# Cleanup Analysis filters
+for b from 1 to num_bands
+    removeObject: target_band[b], source_band[b]
+endfor
+
+# ==============================================================================
+# 2. MATCHING
+# ==============================================================================
+appendInfoLine: "Matching..."
 
 # Z-score normalization
 for b from 1 to num_bands
@@ -250,8 +232,7 @@ for k from 1 to target_frames
     endfor
 endfor
 
-# Compute lambda
-appendInfoLine: "Computing lambda..."
+# Compute Lambda
 sample_size = min(150, target_frames * 3)
 for s from 1 to sample_size
     k_samp = randomInteger(1, target_frames)
@@ -259,14 +240,11 @@ for s from 1 to sample_size
     @computeDistance: k_samp, j_samp, num_bands
     sample_dist[s] = computeDistance.result
 endfor
-
 @median: sample_size
 lambda = continuity_weight_lambda * median.result
 
+# Search
 locality_range = max(1, round(locality_window / snippet_hop))
-
-# === Matching ===
-appendInfoLine: "Matching (", target_frames, " frames)..."
 prev_match = 0
 
 for k from 1 to target_frames
@@ -284,100 +262,149 @@ for k from 1 to target_frames
     for j from j_min to j_max
         @computeDistance: k, j, num_bands
         dist = computeDistance.result
-        
         if k = 1
             cost = dist
         else
-            time_jump = abs((snippet_start[j] - snippet_start[prev_match]) - hop_size)
+            pos_j = (j - 1) * snippet_hop
+            pos_prev = (prev_match - 1) * snippet_hop
+            time_jump = abs((pos_j - pos_prev) - hop_size)
             cost = dist + lambda * time_jump
         endif
         
         if cost < best_cost
             best_cost = cost
             best_j = j
-        elsif abs(cost - best_cost) < 1e-6
-            if abs(j - prev_match) < abs(best_j - prev_match)
-                best_j = j
-            endif
         endif
     endfor
-    
     match[k] = best_j
     prev_match = best_j
 endfor
 
-# === Overlap-Add ===
-appendInfoLine: "Building output..."
-output_dur = (target_frames - 1) * hop_size + window_length
-selectObject: source
-output = Create Sound from formula: "Output", 1, 0, output_dur, source_sr, "0"
+# ==============================================================================
+# 3. SYNTHESIS (Clean Syntax)
+# ==============================================================================
+appendInfoLine: "Synthesizing..."
 
-selectObject: output
-output_matrix = Down to Matrix
-removeObject: output
+# Master Window
+Create Sound from formula: "MasterWindow", 1, 0, window_length, source_sr, "0.5 * (1 - cos(2 * pi * x / " + fixed$(window_length, 6) + "))"
+win_id = selected("Sound")
 
+# Initialize stream lists
+for s from 1 to num_streams
+    stream_count[s] = 0
+endfor
+
+# Distribute grains
 for k from 1 to target_frames
+    curr_stream = ((k - 1) mod num_streams) + 1
     j = match[k]
-    grain_start = snippet_start[j]
-    output_start = (k - 1) * hop_size
+    grain_start = (j - 1) * snippet_hop
     
     selectObject: source
-    grain_end = min(grain_start + window_length, source_dur)
-    if grain_end > grain_start
-        grain = Extract part: grain_start, grain_end, "rectangular", 1.0, "no"
+    g_end = min(grain_start + window_length, source_dur)
+    
+    if g_end > grain_start + (1/source_sr)
+        grain = Extract part: grain_start, g_end, "rectangular", 1, "no"
+        g_dur = Get total duration
         
+        # Padding tolerance check
+        padding_dur = window_length - g_dur
+        if padding_dur > (2.0 / source_sr)
+            g_temp = grain
+            Create Sound from formula: "silence", 1, 0, padding_dur, source_sr, "0"
+            sil = selected("Sound")
+            selectObject: g_temp
+            plusObject: sil
+            grain = Concatenate
+            removeObject: g_temp, sil
+        endif
+        
+        # Window
         selectObject: grain
-        actual_dur = Get total duration
-        fade = crossfade_duration
-        Formula: "if x < fade then self * 0.5*(1 - cos(pi*x/fade)) else if x > (actual_dur - fade) then self * 0.5*(1 - cos(pi*(actual_dur - x)/fade)) else self endif endif"
+        Formula: "self * Sound_MasterWindow[]"
         
-        selectObject: grain
-        grain_matrix = Down to Matrix
-        
-        selectObject: grain_matrix
-        grain_cols = Get number of columns
-        selectObject: output_matrix
-        output_cols = Get number of columns
-        
-        output_start_sample = round(output_start * source_sr) + 1
-        
-        for samp from 1 to grain_cols
-            output_samp = output_start_sample + samp - 1
-            if output_samp >= 1 and output_samp <= output_cols
-                selectObject: grain_matrix
-                grain_val = Get value in cell: 1, samp
-                selectObject: output_matrix
-                output_val = Get value in cell: 1, output_samp
-                Set value: 1, output_samp, output_val + grain_val
-            endif
+        # Store
+        count = stream_count[curr_stream] + 1
+        stream_grains[curr_stream, count] = grain
+        stream_count[curr_stream] = count
+    endif
+endfor
+
+selectObject: win_id
+Remove
+
+# Concatenate streams
+appendInfoLine: "Merging Streams..."
+
+# Generate a unique ID to prevent name collisions
+unique_id = randomInteger(10000, 99999)
+
+for s from 1 to num_streams
+    n = stream_count[s]
+    if n > 0
+        for i from 1 to n
+            id[i] = stream_grains[s, i]
+        endfor
+        selectObject: id[1]
+        for i from 2 to n
+            plusObject: id[i]
         endfor
         
-        removeObject: grain, grain_matrix
+        stream_sound[s] = Concatenate
+        
+        # Cleanup grains
+        for i from 1 to n
+            removeObject: id[i]
+        endfor
+    else
+        # Empty stream handling
+        stream_sound[s] = Create Sound from formula: "silence", 1, 0, 0.1, source_sr, "0"
     endif
     
-    if k mod 100 = 0 or k = target_frames
-        appendInfoLine: "  ", k, " / ", target_frames
-    endif
+    # RENAME to a safe, space-free name
+    selectObject: stream_sound[s]
+    s_name$ = "Strm_" + fixed$(unique_id, 0) + "_" + fixed$(s, 0)
+    Rename: s_name$
+    stream_names$[s] = s_name$
 endfor
 
-selectObject: output_matrix
-output = To Sound (slice): 1
-removeObject: output_matrix
+# Mix Streams
+selectObject: stream_sound[1]
+final_output = Copy: "Result"
+Formula: "0" 
 
-# === Finalize ===
-appendInfoLine: "Finalizing..."
-selectObject: output
+for s from 1 to num_streams
+    selectObject: stream_sound[s]
+    start_offset = (s - 1) * hop_size
+    s_dur = Get total duration
+    
+    current_name$ = stream_names$[s]
+    
+    selectObject: final_output
+    
+    if s > 1
+        # Use fixed$ to prevent scientific notation or spaces in numbers
+        off_samp$ = fixed$(round(start_offset * source_sr), 0)
+        
+        # Praat formula: Sound_Name[]
+        Formula: "self + Sound_" + current_name$ + "[col - " + off_samp$ + "]"
+    else
+        # Base stream (no offset calculation needed)
+        Formula: "self + Sound_" + current_name$ + "[]"
+    endif
+    
+    removeObject: stream_sound[s]
+endfor
+
+selectObject: final_output
 Scale peak: 0.99
 Scale intensity: target_intensity
-Rename: "Concat_'source_name$'_to_'target_name$'_'preset_name$'"
 
-# Cleanup
-for b from 1 to num_bands
-    removeObject: target_band[b], source_band[b]
-endfor
+# [FIX] Variable assigned explicitly before Rename
+final_name$ = "Concat_" + preset_name$
+Rename: final_name$
 
-appendInfoLine: "=== DONE ==="
-selectObject: output
+appendInfoLine: "Done!"
 
 # === PROCEDURES ===
 
@@ -395,7 +422,6 @@ procedure extractPair: .text$, .pair_index
     .start_pos = 1
     .target_comma1 = (.pair_index - 1) * 2 + 1
     .target_comma2 = .target_comma1 + 1
-    
     for .i to length(.text$)
         if mid$(.text$, .i, 1) = ","
             .comma_count += 1
@@ -408,7 +434,6 @@ procedure extractPair: .text$, .pair_index
             endif
         endif
     endfor
-    
     .low = number(.low_str$)
     .high = number(.high_str$)
 endproc
