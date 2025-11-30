@@ -19,8 +19,7 @@
 #   https://github.com/ShaiCohen-ops/Praat-plugin_AudioTools
 # ============================================================
 
-# Wave Interference Pattern (v3.1 - Compatibility Fix)
-# Fixes: "Get frequency of bin" error by removing metadata dependency.
+# Wave Interference Pattern 
 # Speed: Instant (Matrix Math).
 
 form Wave Interference Pattern (Fast)
