@@ -21,39 +21,55 @@
 #   https://github.com/ShaiCohen-ops/Praat-plugin_AudioTools
 # ============================================================
 
+# ZigZag Time Effect (v5.0 - CDP Edition)
+# Includes "Tape Scrub" mode (CDP Style) where backward segments are reversed.
+# Optimization: Iterative Stitching (Memory Safe).
+
 form ZigZag Time Effect
     optionmenu Preset: 1
-        option "Default (moderate zigzag)"
+        option "Default (Tape Scrub)"
         option "Subtle Stutter"
-        option "Aggressive Glitch"
+        option "Aggressive Glitch (CDP)"
         option "Tape Wobble"
         option "Custom"
+    
+    comment Mode:
+    choice Playback_mode 2
+        button Stutter (Always Play Forward)
+        button Scrub (Reverse Audio when Moving Back)
+    
     comment ZigZag parameters:
-    positive zigzag_time 0.05
-    positive forward_ratio 0.6
-    positive segment_overlap 0.002
+    positive Zigzag_time 0.05
+    positive Forward_ratio 0.6
+    positive Segment_overlap 0.002
+    
     comment Direction change parameters:
-    natural direction_changes_per_second 20
-    positive backward_distance_factor 0.8
+    natural Direction_changes_per_second 20
+    positive Backward_distance_factor 0.8
+    
     comment Envelope smoothing:
     optionmenu Window_type: 1
         option Hanning
         option Hamming
         option Rectangular
+    
     comment Variation controls:
-    positive segment_duration_variation 0.15
-    positive amplitude_variation 0.1
+    positive Segment_duration_variation 0.15
+    positive Amplitude_variation 0.1
+    
     comment Output options:
-    positive scale_peak 0.91
-    boolean play_after_processing 1
-    comment Random seed (optional, leave unchecked for random):
-    boolean use_random_seed 0
-    positive random_seed 12345
+    positive Scale_peak 0.91
+    boolean Play_after_processing 1
+    
+    comment Random seed:
+    boolean Use_random_seed 0
+    positive Random_seed 12345
 endform
 
-# Apply preset values if not Custom
+# --- 1. APPLY PRESETS ---
 if preset = 1
-    # Default (moderate zigzag)
+    # Default (Tape Scrub - CDP Style)
+    playback_mode = 2
     zigzag_time = 0.05
     forward_ratio = 0.6
     segment_overlap = 0.002
@@ -62,7 +78,8 @@ if preset = 1
     segment_duration_variation = 0.15
     amplitude_variation = 0.1
 elsif preset = 2
-    # Subtle Stutter
+    # Subtle Stutter (Original Style)
+    playback_mode = 1
     zigzag_time = 0.08
     forward_ratio = 0.75
     segment_overlap = 0.003
@@ -71,7 +88,8 @@ elsif preset = 2
     segment_duration_variation = 0.08
     amplitude_variation = 0.05
 elsif preset = 3
-    # Aggressive Glitch
+    # Aggressive Glitch (CDP Style)
+    playback_mode = 2
     zigzag_time = 0.03
     forward_ratio = 0.5
     segment_overlap = 0.001
@@ -81,6 +99,7 @@ elsif preset = 3
     amplitude_variation = 0.2
 elsif preset = 4
     # Tape Wobble
+    playback_mode = 2
     zigzag_time = 0.12
     forward_ratio = 0.65
     segment_overlap = 0.005
@@ -90,46 +109,31 @@ elsif preset = 4
     amplitude_variation = 0.08
 endif
 
-# Check if a sound object is selected
+# --- 2. SETUP ---
 if !selected("Sound")
     exitScript: "Please select a Sound object first."
 endif
 
-# Get selected sound info
 soundID = selected("Sound")
 soundName$ = selected$("Sound")
 totalDuration = Get total duration
 sampleRate = Get sampling frequency
 
-# Validate parameters
 if zigzag_time >= totalDuration
-    exitScript: "ZigZag time (" + string$(zigzag_time) + " s) must be less than sound duration (" + string$(totalDuration) + " s)."
+    exitScript: "ZigZag time must be less than sound duration."
 endif
 
-# Set random seed if specified
 if use_random_seed
     randomSeed: random_seed
 endif
 
-# Calculate segment duration based on direction changes per second
+# Base calculations
 segment_duration = 1.0 / direction_changes_per_second
-
-# Ensure segment duration is reasonable
 if segment_duration > zigzag_time
     segment_duration = zigzag_time / 2
 endif
 
-# Calculate total number of segments needed
-estimatedSegments = ceiling(totalDuration / (segment_duration * forward_ratio))
-
-# Array to store segment IDs
-segmentIDs# = zero#(estimatedSegments * 2)
-segmentCount = 0
-
-# Current playback position
-currentPosition = 0.0
-
-# Window type for extraction
+# Window type string
 if window_type = 1
     windowName$ = "Hanning"
 elsif window_type = 2
@@ -138,56 +142,50 @@ else
     windowName$ = "Rectangular"
 endif
 
-# Main zigzag processing loop
-writeInfoLine: "Processing ZigZag effect..."
-appendInfoLine: "Total duration: ", totalDuration, " s"
-appendInfoLine: "Segment duration: ", segment_duration, " s"
-appendInfoLine: "ZigZag time window: ", zigzag_time, " s"
-appendInfoLine: ""
+# Info Log
+mode_str$ = "Stutter"
+if playback_mode = 2
+    mode_str$ = "Scrub (CDP)"
+endif
+writeInfoLine: "Processing ZigZag (" + mode_str$ + ")..."
 
-# Direction flag (1 = forward, -1 = backward)
+# --- 3. PROCESSING LOOP ---
+currentPosition = 0.0
 direction = 1
+segmentCount = 0
+masterID = 0
 
 while currentPosition < totalDuration
     segmentCount += 1
     
+    # --- A. DETERMINE SEGMENT ---
     if direction = 1
-        # Forward segment
-        # Randomize segment duration
-        currentSegDuration = segment_duration * randomUniform(1.0 - segment_duration_variation, 1.0 + segment_duration_variation)
+        # -- FORWARD SEGMENT --
+        var = randomUniform(1.0 - segment_duration_variation, 1.0 + segment_duration_variation)
+        currentSegDuration = segment_duration * var
         
         startTime = currentPosition
         endTime = currentPosition + currentSegDuration
         
-        # Ensure we don't exceed total duration
+        # Clamp
         if endTime > totalDuration
             endTime = totalDuration
         endif
         
-        # Extract forward segment
+        # Extract
         selectObject: soundID
-        extractedID = Extract part: startTime, endTime, windowName$, 1, "no"
-        segmentIDs#[segmentCount] = extractedID
+        grain = Extract part: startTime, endTime, windowName$, 1, "no"
         
-        # Apply amplitude variation
-        ampFactor = randomUniform(1.0 - amplitude_variation, 1.0 + amplitude_variation)
-        Formula: "self * ampFactor"
-        
-        # Move position forward
+        # Move Forward
         currentPosition += currentSegDuration * forward_ratio
-        
-        # Switch to backward
         direction = -1
         
     else
-        # Backward segment
-        # Randomize segment duration
-        currentSegDuration = segment_duration * randomUniform(1.0 - segment_duration_variation, 1.0 + segment_duration_variation)
+        # -- BACKWARD SEGMENT --
+        var = randomUniform(1.0 - segment_duration_variation, 1.0 + segment_duration_variation)
+        currentSegDuration = segment_duration * var
         
-        # Calculate backward distance
         backwardDistance = currentSegDuration * backward_distance_factor
-        
-        # Calculate start and end for backward segment
         backStartPos = currentPosition - backwardDistance
         if backStartPos < 0
             backStartPos = 0
@@ -196,7 +194,7 @@ while currentPosition < totalDuration
         startTime = backStartPos
         endTime = backStartPos + currentSegDuration
         
-        # Ensure we don't exceed bounds
+        # Clamp
         if endTime > totalDuration
             endTime = totalDuration
             startTime = endTime - currentSegDuration
@@ -205,72 +203,66 @@ while currentPosition < totalDuration
             endif
         endif
         
-        # Extract backward segment and reverse it
+        # Extract
         selectObject: soundID
-        extractedID = Extract part: startTime, endTime, windowName$, 1, "no"
-        Reverse
-        segmentIDs#[segmentCount] = selected("Sound")
+        grain = Extract part: startTime, endTime, windowName$, 1, "no"
         
-        # Apply amplitude variation
-        ampFactor = randomUniform(1.0 - amplitude_variation, 1.0 + amplitude_variation)
-        Formula: "self * ampFactor"
+        # [THE CDP FIX]
+        # If we are in Scrub Mode (2), we REVERSE the backward segments.
+        if playback_mode = 2
+            Reverse
+        endif
         
-        # Continue moving forward overall
+        # Move Forward slightly
         currentPosition += currentSegDuration * forward_ratio * 0.3
-        
-        # Switch back to forward
         direction = 1
     endif
     
-    # Progress indicator
-    if segmentCount mod 50 = 0
-        progressPercent = round((currentPosition / totalDuration) * 100)
-        appendInfoLine: "Processed ", segmentCount, " segments (", progressPercent, "% complete)..."
+    # --- B. AMPLITUDE JITTER ---
+    selectObject: grain
+    ampFactor = randomUniform(1.0 - amplitude_variation, 1.0 + amplitude_variation)
+    Formula: "self * " + fixed$(ampFactor, 4)
+    
+    # --- C. STITCHING (Memory Safe) ---
+    if masterID = 0
+        # First segment
+        masterID = grain
+        Rename: "Output_Temp"
+    else
+        # Append to Master
+        selectObject: masterID
+        plusObject: grain
+        
+        if segment_overlap > 0
+            # Overlap-add smooths the seams between forward/reverse
+            tempID = Concatenate with overlap: segment_overlap
+        else
+            tempID = Concatenate
+        endif
+        
+        # Clean up immediately
+        removeObject: masterID
+        removeObject: grain
+        
+        # Update Master
+        masterID = tempID
+        Rename: "Output_Temp"
     endif
     
-    # Safety limit
-    if segmentCount >= estimatedSegments * 2
-        break
+    # Progress
+    if segmentCount mod 50 = 0
+        perc = round((currentPosition / totalDuration) * 100)
+        appendInfoLine: "Segment: ", segmentCount, " (", perc, "%)"
     endif
 endwhile
 
-appendInfoLine: "Total segments created: ", segmentCount
-appendInfoLine: "Concatenating segments..."
+# --- 4. FINALIZE ---
+selectObject: masterID
+Rename: soundName$ + "_ZigZag"
+Scale peak: scale_peak
 
-# Select all segments and concatenate
-if segmentCount > 0
-    selectObject: segmentIDs#[1]
-    for seg from 2 to segmentCount
-        if segmentIDs#[seg] != 0
-            plusObject: segmentIDs#[seg]
-        endif
-    endfor
-    
-    # Concatenate with overlap
-    if segment_overlap > 0
-        concatenatedID = Concatenate with overlap: segment_overlap
-    else
-        concatenatedID = Concatenate
-    endif
-    
-    Rename: soundName$ + "_zigzag"
-    
-    # Scale to peak
-    Scale peak: scale_peak
-    
-    appendInfoLine: "ZigZag effect complete!"
-    
-    # Clean up: remove individual segments
-    for seg from 1 to segmentCount
-        if segmentIDs#[seg] != 0
-            removeObject: segmentIDs#[seg]
-        endif
-    endfor
-    
-    # Play if requested
-    if play_after_processing
-        Play
-    endif
-else
-    exitScript: "No segments were created. Check your parameters."
+appendInfoLine: "Done! Created ", segmentCount, " segments."
+
+if play_after_processing
+    Play
 endif
