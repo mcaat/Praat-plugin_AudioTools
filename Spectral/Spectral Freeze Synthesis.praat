@@ -18,29 +18,21 @@
 #   Cohen, S. (2025). Praat AudioTools: An Offline Analysis–Resynthesis Toolkit for Experimental Composition.
 #   https://github.com/ShaiCohen-ops/Praat-plugin_AudioTools
 # ============================================================
-# Fast Spectral Freeze (v4.0 - Ultimate Speed)
-# Combines Formula Batching + Downsampling for maximum performance.
 
-form Spectral Freeze (Ultimate)
+# Fast Spectral Freeze (Matrix-Optimized)
+# Optimized peak detection and synthesis
+
+form Spectral Freeze (Optimized)
     optionmenu preset: 1
         option Custom (manual settings below)
         option Freeze (classic hold)
         option Gentle decay (slow fade)
         option Rising shimmer (decay + up)
         option Falling shimmer (decay + down)
-        option Ghostly rise (strong decay + up)
-        option Deep dive (strong decay + down)
-        option Crystalline (minimal decay + micro-up)
-        option Submerge (minimal decay + micro-down)
     
-    comment --- Performance ---
-    choice   processing_quality 2
-        button High (Original Rate - Slow)
-        button Medium (22050 Hz - Fast)
-        button Low (11025 Hz - Super Fast)
-
     comment --- Analysis ---
-    positive frame_step_ms 10
+    positive frame_step_ms 20
+    comment (Larger = faster, 10-50ms typical)
     positive analysis_window_ms 35
     positive max_frequency_hz 8000
     integer  top_partials 10
@@ -70,18 +62,6 @@ elsif preset = 4
 elsif preset = 5
     decay_factor = 0.3
     glissando_oct_sec = -0.15
-elsif preset = 6
-    decay_factor = 0.15
-    glissando_oct_sec = 0.3
-elsif preset = 7
-    decay_factor = 0.15
-    glissando_oct_sec = -0.3
-elsif preset = 8
-    decay_factor = 0.9
-    glissando_oct_sec = 0.05
-elsif preset = 9
-    decay_factor = 0.9
-    glissando_oct_sec = -0.05
 endif
 
 # --- SETUP ---
@@ -89,12 +69,16 @@ if numberOfSelected("Sound") <> 1
     exitScript: "Please select exactly one Sound."
 endif
 
+writeInfoLine: "Spectral Freeze (Optimized)"
+appendInfoLine: "Preset: ", preset$
+appendInfoLine: ""
+
 orig_id = selected("Sound")
 orig_name$ = selected$("Sound")
 orig_sr = Get sampling frequency
 n_channels = Get number of channels
 
-# 1. PREPARE INPUT (Mono Copy)
+# 1. PREPARE INPUT (Mono)
 if n_channels > 1
     selectObject: orig_id
     input_id = Convert to mono
@@ -103,24 +87,9 @@ else
     input_id = Copy: "input"
 endif
 
-# 2. DOWNSAMPLE (The Speed Boost)
-if processing_quality = 2
-    Resample: 22050, 50
-    temp_id = selected("Sound")
-    removeObject: input_id
-    input_id = temp_id
-elsif processing_quality = 3
-    Resample: 11025, 50
-    temp_id = selected("Sound")
-    removeObject: input_id
-    input_id = temp_id
-endif
-
-# Get working parameters
-selectObject: input_id
-work_sr = Get sampling frequency
 # Add Tail
-tail_id = Create Sound from formula: "tail", 1, 0, tail_duration_sec, work_sr, "0"
+selectObject: input_id
+tail_id = Create Sound from formula: "tail", 1, 0, tail_duration_sec, orig_sr, "0"
 selectObject: input_id
 plusObject: tail_id
 temp_id = Concatenate
@@ -138,31 +107,30 @@ gliss_ratio = 2 ^ (glissando_oct_sec * dt)
 stereo_delay_sec = stereo_delay_ms / 1000
 nframes = floor((tot_dur - win_dur) / dt)
 
-# Create Output (at working rate)
+appendInfoLine: "Processing ", nframes, " frames (step: ", frame_step_ms, " ms)"
+appendInfoLine: ""
+
+# Create Output
 out_chans = 1
 if create_stereo_output
     out_chans = 2
 endif
-output_id = Create Sound from formula: "Freeze", out_chans, 0, tot_dur, work_sr, "0"
+output_id = Create Sound from formula: "Freeze", out_chans, 0, tot_dur, orig_sr, "0"
 
 # --- INITIALIZE ACCUMULATORS ---
 acc_freq# = zero#(top_partials)
 acc_amp# = zero#(top_partials)
 
-# Pre-calc bin width suppression
+# Pre-calc suppression
 bin_hz = 1 / win_dur
-suppress_bins = round(50 / bin_hz) 
-if suppress_bins < 1 
-    suppress_bins = 1 
+suppress_bins = round(50 / bin_hz)
+if suppress_bins < 1
+    suppress_bins = 1
 endif
-
-writeInfoLine: "Spectral Freeze (Ultimate): ", preset$
-appendInfoLine: "Rate: ", work_sr, " Hz"
-appendInfoLine: "Processing ", nframes, " frames..."
 
 # --- MAIN LOOP ---
 for i from 0 to nframes - 1
-    if i mod 50 = 0
+    if i mod 20 = 0
         perc = i / nframes * 100
         appendInfoLine: "Progress: ", fixed$(perc, 1), "%"
     endif
@@ -180,17 +148,18 @@ for i from 0 to nframes - 1
     selectObject: spec_id
     mat_id = To Matrix
     
-    # Calculate Magnitude (Row 1)
+    # Single-pass magnitude calculation
+    selectObject: mat_id
     Formula: "if row = 1 then sqrt(self^2 + self[2,col]^2) else 0 fi"
     
     nc = Get number of columns
-    freq_step = (work_sr/2) / (nc - 1)
-    
-    # Limit Frequency Range via masking
+    freq_step = (orig_sr/2) / (nc - 1)
     max_col = round(max_frequency_hz / freq_step) + 1
     if max_col > nc
         max_col = nc
     endif
+    
+    # Limit frequency range
     Formula: "if col > " + string$(max_col) + " then 0 else self fi"
     
     # 2. UPDATE ACCUMULATORS
@@ -204,14 +173,14 @@ for i from 0 to nframes - 1
         endif
     endfor
     
-    # 3. PICK NEW PEAKS
+    # 3. FIND PEAKS (Manual search - unavoidable)
     for k from 1 to top_partials
         selectObject: mat_id
         
-        # Manual Max Search
         cur_max = -1
         cur_col = -1
         
+        # Search for maximum
         for c from 1 to max_col
             val = Get value in cell: 1, c
             if val > cur_max
@@ -223,24 +192,25 @@ for i from 0 to nframes - 1
         if cur_max > 0.000001
             cur_freq = (cur_col - 1) * freq_step
             
-            # FREEZE LOGIC
+            # Freeze logic
             if cur_max > acc_amp#[k]
                 acc_amp#[k] = cur_max
                 acc_freq#[k] = cur_freq
             endif
             
-            # Suppress
+            # Suppress this peak
             sup_c1 = cur_col - suppress_bins
             sup_c2 = cur_col + suppress_bins
             Formula: "if col >= " + string$(sup_c1) + " and col <= " + string$(sup_c2) + " then 0 else self fi"
         endif
     endfor
     
-    # 4. BATCH SYNTHESIS
-    Create Sound from formula: "grain", out_chans, 0, win_dur, work_sr, "0"
+    # 4. SYNTHESIZE GRAIN (Batch formula)
+    Create Sound from formula: "grain", out_chans, 0, win_dur, orig_sr, "0"
     grain_id = selected("Sound")
     Shift times to: "start time", t_start
     
+    # Build synthesis formula
     left_sum$ = ""
     right_sum$ = ""
     s_delay$ = fixed$(stereo_delay_sec, 6)
@@ -252,7 +222,7 @@ for i from 0 to nframes - 1
         amp = acc_amp#[k]
         
         if freq > 0 and amp > 0.000001
-            amp_lin = amp / (win_dur * work_sr / 4)
+            amp_lin = amp / (win_dur * orig_sr / 4)
             s_freq$ = fixed$(freq, 2)
             s_amp$ = fixed$(amp_lin, 8)
             
@@ -274,14 +244,14 @@ for i from 0 to nframes - 1
         else
             Formula: "if row = 1 then self" + left_sum$ + " else self" + right_sum$ + " fi"
         endif
+        
+        # Apply Hanning window
+        s_dur$ = fixed$(win_dur, 6)
+        s_start$ = fixed$(t_start, 6)
+        Formula: "self * 0.5 * (1 - cos(2*pi * (x - " + s_start$ + ") / " + s_dur$ + "))"
     endif
     
-    # Window (Hanning)
-    s_dur$ = fixed$(win_dur, 6)
-    s_start$ = fixed$(t_start, 6)
-    Formula: "self * 0.5 * (1 - cos(2*pi * (x - " + s_start$ + ") / " + s_dur$ + "))"
-    
-    # 5. ADD TO OUTPUT
+    # 5. MIX TO OUTPUT
     selectObject: output_id
     s_gid$ = string$(grain_id)
     s_end$ = fixed$(t_end, 6)
@@ -294,25 +264,13 @@ endfor
 # --- FINALIZE ---
 selectObject: output_id
 Rename: orig_name$ + "_Freeze"
-
-# Normalize
 Scale peak: 10^(target_peak_db / 20)
 
-# Restore Sample Rate if needed
-if work_sr <> orig_sr
-    appendInfoLine: "Restoring sample rate to ", orig_sr, " Hz..."
-    resampled_id = Resample: orig_sr, 50
-    removeObject: output_id
-    output_id = resampled_id
-    selectObject: output_id
-    Rename: orig_name$ + "_Freeze"
-endif
-
-# Clean inputs
 removeObject: input_id
 
 if play_after
     Play
 endif
 
+appendInfoLine: ""
 appendInfoLine: "Done!"
