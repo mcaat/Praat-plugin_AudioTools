@@ -19,25 +19,50 @@
 #   https://github.com/ShaiCohen-ops/Praat-plugin_AudioTools
 # ============================================================
 
-# Phase History Swap (v7.0 - Optimized & Corrected)
+# Phase History Swap (v7.1 - With Presets - Fixed)
 # Creates wide stereo by processing L/R with slightly different split points.
-# Improvements: 
-# 1. Immediate memory cleanup to prevent RAM spikes.
-# 2. Correct Frequency-Bin alignment (matches Hz to Hz).
 
 form Phase History Swap - Wide Stereo
-    comment Main Split Point (%):
-    positive Split_at_percent 50
+    optionmenu preset: 1
+        option Custom (use settings below)
+        option Subtle Swap (50% split)
+        option Early Swap (30% split)
+        option Late Swap (70% split)
+        option Extreme Early (20% split)
+        option Extreme Late (80% split)
     
-    comment Stereo Offset (%):
+    comment === Custom Settings ===
+    positive Split_at_percent 50
     positive Stereo_offset_percent 1.0
     comment (Left = Split, Right = Split + Offset)
-    
-    comment --- Tail Settings ---
     positive Fade_out_seconds 0.5
-    
     boolean Preview_info 1
 endform
+
+# Apply presets
+if preset = 2
+    split_at_percent = 50
+    stereo_offset_percent = 1.0
+    preset_name$ = "Subtle"
+elsif preset = 3
+    split_at_percent = 30
+    stereo_offset_percent = 1.5
+    preset_name$ = "Early"
+elsif preset = 4
+    split_at_percent = 70
+    stereo_offset_percent = 1.5
+    preset_name$ = "Late"
+elsif preset = 5
+    split_at_percent = 20
+    stereo_offset_percent = 2.0
+    preset_name$ = "ExtremeEarly"
+elsif preset = 6
+    split_at_percent = 80
+    stereo_offset_percent = 2.0
+    preset_name$ = "ExtremeLate"
+else
+    preset_name$ = "Custom"
+endif
 
 # Get selected sound
 if numberOfSelected("Sound") <> 1
@@ -47,6 +72,7 @@ endif
 sound = selected("Sound")
 sound_name$ = selected$("Sound")
 n_channels = Get number of channels
+orig_sr = Get sampling frequency
 
 # 1. PREPARE INPUT (Force Mono Source)
 if n_channels > 1
@@ -60,12 +86,13 @@ endif
 
 if preview_info
     writeInfoLine: "Phase History Swap (Wide Stereo)"
+    appendInfoLine: "Preset: ", preset_name$
     appendInfoLine: "Left Split: ", split_at_percent, "%"
     appendInfoLine: "Right Split: ", split_at_percent + stereo_offset_percent, "%"
 endif
 
 # 2. PROCESS LEFT CHANNEL (Base Split)
-@FastPhaseSwap: working_sound, split_at_percent
+@FastPhaseSwap: working_sound, split_at_percent, orig_sr
 left_result = selected("Sound")
 
 # 3. PROCESS RIGHT CHANNEL (Split + Offset)
@@ -76,14 +103,14 @@ if offset_split >= 99
     offset_split = 99
 endif
 
-@FastPhaseSwap: working_sound, offset_split
+@FastPhaseSwap: working_sound, offset_split, orig_sr
 right_result = selected("Sound")
 
 # 4. COMBINE TO STEREO
 selectObject: left_result
 plusObject: right_result
 stereo_final = Combine to stereo
-Rename: sound_name$ + "_PhaseSwap_Wide"
+Rename: sound_name$ + "_PhaseSwap_" + preset_name$
 
 # 5. APPLY FADEOUT
 if fade_out_seconds > 0
@@ -94,12 +121,10 @@ if fade_out_seconds > 0
     s_start$ = fixed$(t_fade_start, 6)
     s_dur$ = fixed$(actual_fade, 6)
     
-    # Formula works on both channels automatically
     Formula: "if x > " + s_start$ + " then self * 0.5 * (1 + cos(pi * (x - " + s_start$ + ") / " + s_dur$ + ")) else self fi"
 endif
 
 # 6. CLEANUP
-# Remove the mono source and the two mono processed chunks
 removeObject: working_sound, left_result, right_result
 
 if preview_info
@@ -111,9 +136,9 @@ Scale peak: 0.99
 Play
 
 # =======================================================
-# PROCEDURE: Vectorized Matrix Swap (Optimized)
+# PROCEDURE: Vectorized Matrix Swap (Fixed for extreme splits)
 # =======================================================
-procedure FastPhaseSwap: .src_id, .split_pct
+procedure FastPhaseSwap: .src_id, .split_pct, .target_sr
     selectObject: .src_id
     .tot_dur = Get total duration
     .split_time = .tot_dur * (.split_pct / 100)
@@ -125,9 +150,6 @@ procedure FastPhaseSwap: .src_id, .split_pct
     .late = Extract part: .split_time, .tot_dur, "rectangular", 1, "no"
     
     # --- B. Matrix Conversion & Immediate Cleanup ---
-    # We convert to Matrix and immediately delete the Source/Spectrum
-    # to keep memory footprint low.
-    
     selectObject: .early
     .spec_e = To Spectrum: "yes"
     .mat_e = To Matrix
@@ -142,13 +164,6 @@ procedure FastPhaseSwap: .src_id, .split_pct
     removeObject: .late, .spec_l
     
     # --- C. Vectorized Math (Frequency Corrected) ---
-    
-    # [DSP FIX] 
-    # To map 100Hz in the Late chunk to 100Hz in the Early chunk,
-    # we must account for different bin widths caused by different durations.
-    # BinWidth = 1/Duration.
-    # The ratio is Early_Duration / Late_Duration.
-    
     .dur_ratio = .split_time / .late_dur
     
     # Prepare Formula Strings (High Precision)
@@ -158,12 +173,9 @@ procedure FastPhaseSwap: .src_id, .split_pct
     
     # 1. Map Columns (Frequency alignment)
     .c_raw$ = "round(col * " + .s_ratio$ + ")"
-    # Clamp the index to ensure we don't look outside the Early matrix
     .c_safe$ = "(if " + .c_raw$ + " < 1 then 1 else (if " + .c_raw$ + " > " + .s_nc_e$ + " then " + .s_nc_e$ + " else " + .c_raw$ + " fi) fi)"
     
     # 2. Define Lookups
-    # We look up the Real/Imaginary parts from the EARLY matrix (.id_e)
-    # using the calculated column index (.c_safe$)
     .early_re$ = "object[" + .s_id_e$ + ", 1, " + .c_safe$ + "]"
     .early_im$ = "object[" + .s_id_e$ + ", 2, " + .c_safe$ + "]"
     
@@ -171,21 +183,33 @@ procedure FastPhaseSwap: .src_id, .split_pct
     .target_phase$ = "arctan2(" + .early_im$ + ", " + .early_re$ + ")"
     .self_mag$ = "sqrt(self[1,col]^2 + self[2,col]^2)"
     
-    # 4. Apply to the LATE matrix (Self)
-    # Row 1 = Real, Row 2 = Imaginary
+    # 4. Apply to the LATE matrix
     Formula: "if row = 1 then " + .self_mag$ + " * cos(" + .target_phase$ + ") else " + .self_mag$ + " * sin(" + .target_phase$ + ") fi"
     
     # --- D. Reconstruct ---
     .spec_out = To Spectrum
     .snd_out = To Sound
     
-    # Fix Duration to match exact tail length
+    # FIXED: Ensure exact sample rate and duration
+    selectObject: .snd_out
+    .actual_sr = Get sampling frequency
+    .actual_dur = Get total duration
+    
+    # If sample rate doesn't match, resample
+    if .actual_sr <> .target_sr
+        Resample: .target_sr, 50
+        .resampled = selected("Sound")
+        removeObject: .snd_out
+        .snd_out = .resampled
+    endif
+    
+    # Extract to exact duration
+    selectObject: .snd_out
     Extract part: 0, .late_dur, "rectangular", 1, "no"
     .final_id = selected("Sound")
     
     # --- E. Final Cleanup ---
     removeObject: .mat_e, .mat_l, .spec_out, .snd_out
     
-    # Return the ID of the result
     selectObject: .final_id
 endproc
