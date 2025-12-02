@@ -19,7 +19,19 @@
 #   https://github.com/ShaiCohen-ops/Praat-plugin_AudioTools
 # ============================================================
 
+# Advanced Poisson Synthesis System (Ultra-Fast)
+# Optimization: Batch formula building instead of individual grain insertion
+
 form Advanced Poisson Synthesis System
+    optionmenu preset: 1
+        option Custom (use settings below)
+        option Standard Three Layer
+        option Dense Cloud
+        option Sparse Atmosphere
+        option Rhythmic Pattern
+        option Chaotic Texture
+    
+    comment === Custom Settings ===
     positive Duration_(sec) 12
     positive Base_frequency_(Hz) 100
     positive Frequency_range_(Hz) 300
@@ -38,304 +50,295 @@ form Advanced Poisson Synthesis System
         option Mono
         option Stereo Wide
         option Rotating
-        option Binaural
     boolean Normalize_output 1
 endform
 
+# Apply presets
+if preset = 2
+    # Standard Three Layer
+    duration = 12
+    base_frequency = 100
+    frequency_range = 300
+    low_rate = 3
+    high_rate = 15
+    number_of_layers = 3
+    randomize_parameters = 1
+    fade_time = 2
+    synthesis_mode = 1
+    spatial_mode = 1
+    normalize_output = 1
+    preset_name$ = "Standard"
+elsif preset = 3
+    # Dense Cloud
+    duration = 10
+    base_frequency = 150
+    frequency_range = 400
+    low_rate = 10
+    high_rate = 25
+    number_of_layers = 4
+    randomize_parameters = 1
+    fade_time = 2
+    synthesis_mode = 2
+    spatial_mode = 2
+    normalize_output = 1
+    preset_name$ = "DenseCloud"
+elsif preset = 4
+    # Sparse Atmosphere
+    duration = 20
+    base_frequency = 80
+    frequency_range = 500
+    low_rate = 1
+    high_rate = 5
+    number_of_layers = 3
+    randomize_parameters = 1
+    fade_time = 3
+    synthesis_mode = 3
+    spatial_mode = 3
+    normalize_output = 1
+    preset_name$ = "Sparse"
+elsif preset = 5
+    # Rhythmic Pattern
+    duration = 15
+    base_frequency = 120
+    frequency_range = 200
+    low_rate = 5
+    high_rate = 12
+    number_of_layers = 4
+    randomize_parameters = 0
+    fade_time = 2
+    synthesis_mode = 4
+    spatial_mode = 1
+    normalize_output = 1
+    preset_name$ = "Rhythmic"
+elsif preset = 6
+    # Chaotic Texture
+    duration = 12
+    base_frequency = 100
+    frequency_range = 600
+    low_rate = 2
+    high_rate = 20
+    number_of_layers = 5
+    randomize_parameters = 1
+    fade_time = 2
+    synthesis_mode = 5
+    spatial_mode = 2
+    normalize_output = 1
+    preset_name$ = "Chaotic"
+else
+    preset_name$ = "Custom"
+endif
+
+# Validation
 if number_of_layers > 8
     number_of_layers = 8
 endif
 
-sample_rate = 44100
+writeInfoLine: "Poisson Synthesis (Ultra-Fast)"
+appendInfoLine: "Preset: ", preset_name$
+appendInfoLine: "Duration: ", duration, " s"
+appendInfoLine: "Layers: ", number_of_layers
+appendInfoLine: ""
 
-echo Building Advanced Poisson Synthesis...
+sample_rate = 44100
 
 # Create base sound
 Create Sound from formula: "gen_output", 1, 0, duration, sample_rate, "0"
+output_id = selected("Sound")
 
-if synthesis_mode = 1
-    # Three Layer Standard
-    for layer from 1 to number_of_layers
+# ====== PROCESS EACH LAYER ======
+for layer from 1 to number_of_layers
+    appendInfo: "  Layer ", layer, "/", number_of_layers, "..."
+    
+    # Determine layer rate based on synthesis mode
+    if synthesis_mode = 1
+        # Three Layer Standard
         if randomize_parameters
             layer_rate = low_rate + (high_rate - low_rate) * (layer - 1) / max(1, number_of_layers - 1) * (0.8 + 0.4 * randomUniform(0, 1))
         else
             layer_rate = low_rate + (high_rate - low_rate) * (layer - 1) / max(1, number_of_layers - 1)
         endif
-        
-        Create Poisson process: "poisson_layer_'layer'", 0, duration, layer_rate
-        
-        select PointProcess poisson_layer_'layer'
-        num_points = Get number of points
-        echo Layer 'layer': 'num_points' points at 'layer_rate:1' events/sec
-        
-        for point to num_points
-            select PointProcess poisson_layer_'layer'
-            point_time = Get time from index: point
-            grain_freq = base_frequency + frequency_range * randomUniform(0, 1)
-            grain_dur = 0.1 + 0.2 * randomUniform(0, 1)
-            grain_amp = 1.5 / number_of_layers
-            
-            call addGrainToOutput
-        endfor
-        
-        select PointProcess poisson_layer_'layer'
-        Remove
-    endfor
-    
-elsif synthesis_mode = 2
-    # Dense Granular
-    for layer from 1 to number_of_layers
+    elsif synthesis_mode = 2
+        # Dense Granular
         if randomize_parameters
             layer_rate = high_rate * 1.5 * (0.7 + 0.6 * randomUniform(0, 1))
         else
             layer_rate = high_rate * 1.5
         endif
-        
-        Create Poisson process: "poisson_layer_'layer'", 0, duration, layer_rate
-        
-        select PointProcess poisson_layer_'layer'
-        num_points = Get number of points
-        echo Layer 'layer': 'num_points' points at 'layer_rate:1' events/sec
-        
-        for point to num_points
-            select PointProcess poisson_layer_'layer'
-            point_time = Get time from index: point
-            grain_freq = base_frequency * (0.5 + layer * 0.3) + frequency_range * randomUniform(0, 1)
-            grain_dur = 0.03 + 0.08 * randomUniform(0, 1)
-            grain_amp = 1.2 / number_of_layers
-            
-            call addGrainToOutput
-        endfor
-        
-        select PointProcess poisson_layer_'layer'
-        Remove
-    endfor
-    
-elsif synthesis_mode = 3
-    # Sparse Atmospheric
-    for layer from 1 to number_of_layers
+    elsif synthesis_mode = 3
+        # Sparse Atmospheric
         if randomize_parameters
             layer_rate = low_rate * 0.5 * (0.6 + 0.8 * randomUniform(0, 1))
         else
             layer_rate = low_rate * 0.5
         endif
-        
-        Create Poisson process: "poisson_layer_'layer'", 0, duration, layer_rate
-        
-        select PointProcess poisson_layer_'layer'
-        num_points = Get number of points
-        echo Layer 'layer': 'num_points' points at 'layer_rate:1' events/sec
-        
-        for point to num_points
-            select PointProcess poisson_layer_'layer'
-            point_time = Get time from index: point
-            grain_freq = base_frequency * (0.3 + layer * 0.4) + frequency_range * 0.5 * randomUniform(0, 1)
-            grain_dur = 0.3 + 0.5 * randomUniform(0, 1)
-            grain_amp = 2.0 / number_of_layers
-            
-            call addGrainToOutput
-        endfor
-        
-        select PointProcess poisson_layer_'layer'
-        Remove
-    endfor
-    
-elsif synthesis_mode = 4
-    # Rhythmic Pulses
-    for layer from 1 to number_of_layers
+    elsif synthesis_mode = 4
+        # Rhythmic Pulses
         if randomize_parameters
             layer_rate = (low_rate + high_rate) / 2 * (0.9 + 0.2 * randomUniform(0, 1))
         else
             layer_rate = (low_rate + high_rate) / 2
         endif
-        
-        Create Poisson process: "poisson_layer_'layer'", 0, duration, layer_rate
-        
-        select PointProcess poisson_layer_'layer'
-        num_points = Get number of points
-        echo Layer 'layer': 'num_points' points at 'layer_rate:1' events/sec
-        
-        for point to num_points
-            select PointProcess poisson_layer_'layer'
-            point_time = Get time from index: point
-            grain_freq = base_frequency * layer + frequency_range * 0.3 * randomUniform(0, 1)
-            grain_dur = 0.08 + 0.12 * randomUniform(0, 1)
-            grain_amp = 1.8 / number_of_layers
-            
-            call addGrainToOutput
-        endfor
-        
-        select PointProcess poisson_layer_'layer'
-        Remove
-    endfor
-    
-elsif synthesis_mode = 5
-    # Chaotic Scatter
-    for layer from 1 to number_of_layers
+    elsif synthesis_mode = 5
+        # Chaotic Scatter
         if randomize_parameters
             layer_rate = (low_rate + (high_rate - low_rate) * randomUniform(0, 1)) * (0.5 + randomUniform(0, 1))
         else
             layer_rate = low_rate + (high_rate - low_rate) * randomUniform(0, 1)
         endif
+    endif
+    
+    # Create Poisson process
+    Create Poisson process: "poisson_layer", 0, duration, layer_rate
+    poisson_id = selected("PointProcess")
+    num_points = Get number of points
+    
+    # Build complete layer formula
+    layer_formula$ = "0"
+    
+    for point to num_points
+        selectObject: poisson_id
+        point_time = Get time from index: point
         
-        Create Poisson process: "poisson_layer_'layer'", 0, duration, layer_rate
-        
-        select PointProcess poisson_layer_'layer'
-        num_points = Get number of points
-        echo Layer 'layer': 'num_points' points at 'layer_rate:1' events/sec
-        
-        for point to num_points
-            select PointProcess poisson_layer_'layer'
-            point_time = Get time from index: point
+        # Determine grain parameters based on synthesis mode
+        if synthesis_mode = 1
+            # Standard
+            grain_freq = base_frequency + frequency_range * randomUniform(0, 1)
+            grain_dur = 0.1 + 0.2 * randomUniform(0, 1)
+            grain_amp = 1.5 / number_of_layers
+        elsif synthesis_mode = 2
+            # Dense Granular
+            grain_freq = base_frequency * (0.5 + layer * 0.3) + frequency_range * randomUniform(0, 1)
+            grain_dur = 0.03 + 0.08 * randomUniform(0, 1)
+            grain_amp = 1.2 / number_of_layers
+        elsif synthesis_mode = 3
+            # Sparse Atmospheric
+            grain_freq = base_frequency * (0.3 + layer * 0.4) + frequency_range * 0.5 * randomUniform(0, 1)
+            grain_dur = 0.3 + 0.5 * randomUniform(0, 1)
+            grain_amp = 2.0 / number_of_layers
+        elsif synthesis_mode = 4
+            # Rhythmic Pulses
+            grain_freq = base_frequency * layer + frequency_range * 0.3 * randomUniform(0, 1)
+            grain_dur = 0.08 + 0.12 * randomUniform(0, 1)
+            grain_amp = 1.8 / number_of_layers
+        elsif synthesis_mode = 5
+            # Chaotic Scatter
             grain_freq = base_frequency * (0.5 + 2 * randomUniform(0, 1)) + frequency_range * randomUniform(0, 1)
             grain_dur = 0.05 + 0.3 * randomUniform(0, 1)
             grain_amp = 1.5 / number_of_layers
-            
-            call addGrainToOutput
-        endfor
+        endif
         
-        select PointProcess poisson_layer_'layer'
-        Remove
+        # Clamp grain duration
+        if point_time + grain_dur > duration
+            grain_dur = duration - point_time
+        endif
+        
+        if grain_dur > 0.005
+            # Add grain to formula
+            s_time$ = fixed$(point_time, 6)
+            s_end$ = fixed$(point_time + grain_dur, 6)
+            s_amp$ = fixed$(grain_amp, 6)
+            s_freq$ = fixed$(grain_freq, 2)
+            s_dur$ = fixed$(grain_dur, 6)
+            
+            # Grain formula with Hanning envelope
+            grain_term$ = " + if x >= " + s_time$ + " and x < " + s_end$ + " then " + s_amp$ + " * sin(2*pi*" + s_freq$ + "*(x - " + s_time$ + ")) * (1 - cos(2*pi*(x - " + s_time$ + ")/" + s_dur$ + "))/2 else 0 fi"
+            layer_formula$ = layer_formula$ + grain_term$
+        endif
     endfor
+    
+    # Create layer sound with complete formula
+    Create Sound from formula: "layer", 1, 0, duration, sample_rate, layer_formula$
+    layer_id = selected("Sound")
+    
+    # Add to output
+    selectObject: output_id
+    layer_str$ = string$(layer_id)
+    Formula: "self + object(" + layer_str$ + ", x)"
+    
+    # Cleanup
+    removeObject: poisson_id, layer_id
+    
+    appendInfoLine: " ", num_points, " grains"
+endfor
+
+# ====== APPLY FADE ======
+if fade_time > 0
+    appendInfo: "Applying fade..."
+    selectObject: output_id
+    s_fade$ = fixed$(fade_time, 6)
+    s_dur$ = fixed$(duration, 6)
+    Formula: "if x < " + s_fade$ + " then self * (x / " + s_fade$ + ") else if x > " + s_dur$ + " - " + s_fade$ + " then self * ((" + s_dur$ + " - x) / " + s_fade$ + ") else self fi fi"
+    appendInfoLine: " done"
 endif
 
-# Select gen_output for spatial processing
-select Sound gen_output
+# ====== SPATIAL PROCESSING ======
+selectObject: output_id
 
 if spatial_mode = 1
-    Rename: "poisson_synthesis"
-    final_sound = selected("Sound")
+    # MONO
+    Rename: "poisson_" + preset_name$
     
 elsif spatial_mode = 2
+    # STEREO WIDE
+    appendInfo: "Creating stereo..."
     Copy: "poisson_left"
-    left_sound = selected("Sound")
+    left_id = selected("Sound")
     
-    select Sound gen_output
+    selectObject: output_id
     Copy: "poisson_right"
-    right_sound = selected("Sound")
+    right_id = selected("Sound")
     
-    select left_sound
+    selectObject: left_id
     Formula: "self * 0.8"
     Filter (pass Hann band): 0, 4000, 100
     
-    select right_sound
+    selectObject: right_id
     Formula: "self * 0.8"
     Filter (pass Hann band): 200, 8000, 100
     
-    select left_sound
-    plus right_sound
-    Combine to stereo
-    Rename: "poisson_synthesis"
-    final_sound = selected("Sound")
+    selectObject: left_id
+    plusObject: right_id
+    stereo_id = Combine to stereo
+    Rename: "poisson_" + preset_name$
     
-    select left_sound
-    plus right_sound
-    Remove
+    removeObject: output_id, left_id, right_id
+    output_id = stereo_id
+    appendInfoLine: " done"
     
 elsif spatial_mode = 3
+    # ROTATING
+    appendInfo: "Creating rotating stereo..."
     Copy: "poisson_left"
-    left_sound = selected("Sound")
+    left_id = selected("Sound")
     
-    select Sound gen_output
+    selectObject: output_id
     Copy: "poisson_right"
-    right_sound = selected("Sound")
+    right_id = selected("Sound")
     
-    rotation_rate = 0.25
-    select left_sound
-    Formula: "self * (0.6 + cos(2*pi*'rotation_rate'*x) * 0.4)"
+    selectObject: left_id
+    Formula: "self * (0.6 + cos(2*pi*0.25*x) * 0.4)"
     
-    select right_sound
-    Formula: "self * (0.6 + sin(2*pi*'rotation_rate'*x) * 0.4)"
+    selectObject: right_id
+    Formula: "self * (0.6 + sin(2*pi*0.25*x) * 0.4)"
     
-    select left_sound
-    plus right_sound
-    Combine to stereo
-    Rename: "poisson_synthesis"
-    final_sound = selected("Sound")
+    selectObject: left_id
+    plusObject: right_id
+    stereo_id = Combine to stereo
+    Rename: "poisson_" + preset_name$
     
-    select left_sound
-    plus right_sound
-    Remove
-    
-elsif spatial_mode = 4
-    Copy: "poisson_left"
-    left_sound = selected("Sound")
-    
-    select Sound gen_output
-    Copy: "poisson_right"
-    right_sound = selected("Sound")
-    
-    select left_sound
-    Filter (pass Hann band): 50, 3000, 80
-    
-    select right_sound
-    Formula: "if col > 30 then self[col - 30] else 0 fi"
-    Filter (pass Hann band): 200, 6000, 80
-    
-    select left_sound
-    plus right_sound
-    Combine to stereo
-    Rename: "poisson_synthesis"
-    final_sound = selected("Sound")
-    
-    select left_sound
-    plus right_sound
-    Remove
+    removeObject: output_id, left_id, right_id
+    output_id = stereo_id
+    appendInfoLine: " done"
 endif
 
-# Clean up gen_output if it still exists (not renamed in Mono mode)
-if spatial_mode <> 1
-    select Sound gen_output
-    Remove
-endif
-
-select final_sound
+# ====== FINALIZE ======
+selectObject: output_id
 
 if normalize_output
     Scale peak: 0.9
 endif
 
-call applyFinalFade
+appendInfoLine: ""
+appendInfoLine: "Done!"
 
 Play
-
-echo Advanced Poisson Synthesis complete!
-
-procedure addGrainToOutput
-    if point_time + grain_dur > duration
-        grain_dur = duration - point_time
-    endif
-    
-    if grain_dur > 0.005
-        # Create individual grain as a sound object
-        grain_formula$ = "'grain_amp' * sin(2*pi*'grain_freq'*x) * (1 - cos(2*pi*x/'grain_dur'))/2"
-        Create Sound from formula: "grain", 1, 0, grain_dur, sample_rate, grain_formula$
-        
-        # Extract part of gen_output, add grain, replace
-        select Sound gen_output
-        Extract part: point_time, point_time + grain_dur, "rectangular", 1, "no"
-        Rename: "segment"
-        
-        select Sound segment
-        Formula: "self + Sound_grain[]"
-        
-        # Replace the segment back into gen_output
-        select Sound gen_output
-        override_start = point_time
-        override_end = point_time + grain_dur
-        Formula: "if x >= 'override_start' and x < 'override_end' then Sound_segment[col - round('override_start'*'sample_rate')] else self fi"
-        
-        # Clean up temporary objects
-        select Sound grain
-        plus Sound segment
-        Remove
-    endif
-endproc
-
-procedure applyFinalFade
-    if fade_time > 0
-        fade_samples = fade_time * sample_rate
-        total_samples = duration * sample_rate
-        Formula: "if col < 'fade_samples' then self * (col/'fade_samples') else if col > ('total_samples' - 'fade_samples') then self * (('total_samples' - col)/'fade_samples') else self fi fi"
-    endif
-endproc
