@@ -19,84 +19,185 @@
 #   https://github.com/ShaiCohen-ops/Praat-plugin_AudioTools
 # ============================================================
 
+# Harmonic Resonance Boost (Matrix-Based - STEREO)
+
 form Harmonic Resonance Boost
     comment This script boosts harmonic frequencies and attenuates others
-    comment WARNING: This process can have long runtime on long files
-    comment due to FFT calculations
-    comment Presets:
+    comment Optimized with matrix-based processing for speed
     optionmenu preset: 1
-        option Default
+        option Custom (use settings below)
         option Strong Harmonic Boost
         option Subtle Harmonic Boost
         option Wide Harmonic Bandwidth
         option Deep Attenuation
-    comment Spectrum parameters:
-    boolean fast_fourier yes
-    comment Harmonic boost parameters:
+        option Extreme Resonance
+    comment === Custom Settings ===
     positive fundamental_frequency 440
     comment (base frequency for harmonic series in Hz)
     positive harmonic_bandwidth 50
     comment (width of harmonic region in Hz)
     positive harmonic_boost 1.5
     comment (multiplier for harmonic frequencies)
-    comment Frequency range attenuations:
     positive mid_freq_cutoff 6000
     comment (transition point between mid and high frequency)
     positive low_mid_attenuation 0.6
     comment (attenuation below mid_freq_cutoff)
     positive high_freq_attenuation 0.4
     comment (attenuation above mid_freq_cutoff)
-    comment Output options:
+    boolean create_stereo 1
+    positive stereo_bandwidth_offset 10
+    comment (R channel bandwidth offset in bins for stereo width)
     positive scale_peak 0.88
     boolean play_after_processing 1
-    boolean keep_intermediate_objects 0
 endform
 
 # Apply preset values
-if preset = 2 ; Strong Harmonic Boost
-    harmonic_boost = 2.5
-elif preset = 3 ; Subtle Harmonic Boost
-    harmonic_boost = 1.2
-elif preset = 4 ; Wide Harmonic Bandwidth
-    harmonic_bandwidth = 100
-elif preset = 5 ; Deep Attenuation
+if preset = 2
+    fundamental_frequency = 440
+    harmonic_bandwidth = 50
+    harmonic_boost = 3.0
+    mid_freq_cutoff = 6000
     low_mid_attenuation = 0.4
-    high_freq_attenuation = 0.2
+    high_freq_attenuation = 0.3
+    preset_name$ = "Strong"
+elsif preset = 3
+    fundamental_frequency = 440
+    harmonic_bandwidth = 50
+    harmonic_boost = 1.2
+    mid_freq_cutoff = 6000
+    low_mid_attenuation = 0.75
+    high_freq_attenuation = 0.6
+    preset_name$ = "Subtle"
+elsif preset = 4
+    fundamental_frequency = 440
+    harmonic_bandwidth = 150
+    harmonic_boost = 2.0
+    mid_freq_cutoff = 6000
+    low_mid_attenuation = 0.5
+    high_freq_attenuation = 0.35
+    preset_name$ = "WideBand"
+elsif preset = 5
+    fundamental_frequency = 440
+    harmonic_bandwidth = 50
+    harmonic_boost = 2.5
+    mid_freq_cutoff = 6000
+    low_mid_attenuation = 0.2
+    high_freq_attenuation = 0.1
+    preset_name$ = "DeepAtten"
+elsif preset = 6
+    fundamental_frequency = 440
+    harmonic_bandwidth = 30
+    harmonic_boost = 5.0
+    mid_freq_cutoff = 6000
+    low_mid_attenuation = 0.15
+    high_freq_attenuation = 0.05
+    preset_name$ = "Extreme"
+else
+    preset_name$ = "Custom"
 endif
 
 # Check if a Sound is selected
-if not selected("Sound")
-    exitScript: "Please select a Sound object first."
+if numberOfSelected("Sound") <> 1
+    exitScript: "Please select exactly one Sound object"
 endif
 
-# Get the original sound name
-originalName$ = selected$("Sound")
+writeInfoLine: "Harmonic Resonance Boost (Matrix-Based)"
+appendInfoLine: "=== PRESET: ", preset_name$, " ==="
+if create_stereo
+    appendInfoLine: "MODE: STEREO (bandwidth offset: ", stereo_bandwidth_offset, ")"
+else
+    appendInfoLine: "MODE: MONO"
+endif
+appendInfoLine: "Fundamental: ", fundamental_frequency, " Hz"
+appendInfoLine: "Harmonic bandwidth: ", harmonic_bandwidth, " bins"
+appendInfoLine: "Harmonic boost: ", harmonic_boost, "x"
+appendInfoLine: "Low/mid attenuation: ", low_mid_attenuation, "x"
+appendInfoLine: "High freq attenuation: ", high_freq_attenuation, "x"
+appendInfoLine: ""
 
-# Get sampling frequency
-sampling_rate = Get sampling frequency
+# Get the original sound
+original_sound = selected("Sound")
+original_name$ = selected$("Sound")
+n_channels = Get number of channels
 
-# Convert to spectrum
-spectrum = To Spectrum: fast_fourier
+# Convert to mono if needed
+if n_channels > 1
+    sound = Convert to mono
+else
+    sound = Copy: "mono_temp"
+endif
 
-# Apply harmonic resonance boost with frequency-dependent attenuation
-Formula: "if col mod 'fundamental_frequency' < 'harmonic_bandwidth' then self[1,col] * 'harmonic_boost' else if col < 'mid_freq_cutoff' then self[1,col] * 'low_mid_attenuation' else self[1,col] * 'high_freq_attenuation' fi fi"
+# ===== PROCESS LEFT CHANNEL =====
+appendInfoLine: "Processing LEFT channel..."
 
-# Convert back to sound
-result = To Sound
+selectObject: sound
+spectrum_L = To Spectrum: "yes"
+selectObject: spectrum_L
+matrix_L = To Matrix
 
-# Rename result
-Rename: originalName$ + "_harmonic_boost"
+selectObject: matrix_L
+ncols = Get number of columns
 
-# Scale to peak
+# Apply harmonic boost to left
+Formula: "if (col mod 'fundamental_frequency') < 'harmonic_bandwidth' then self * 'harmonic_boost' else if x < 'mid_freq_cutoff' then self * 'low_mid_attenuation' else self * 'high_freq_attenuation' fi fi"
+
+selectObject: matrix_L
+spectrum_L_mod = To Spectrum
+selectObject: spectrum_L_mod
+result_L = To Sound
+
+appendInfoLine: "Left channel complete"
+
+# ===== PROCESS RIGHT CHANNEL (if stereo) =====
+if create_stereo
+    appendInfoLine: "Processing RIGHT channel..."
+    
+    selectObject: sound
+    spectrum_R = To Spectrum: "yes"
+    selectObject: spectrum_R
+    matrix_R = To Matrix
+    
+    # Right channel uses slightly different bandwidth for stereo width
+    bandwidth_R = harmonic_bandwidth + stereo_bandwidth_offset
+    
+    selectObject: matrix_R
+    Formula: "if (col mod 'fundamental_frequency') < 'bandwidth_R' then self * 'harmonic_boost' else if x < 'mid_freq_cutoff' then self * 'low_mid_attenuation' else self * 'high_freq_attenuation' fi fi"
+    
+    selectObject: matrix_R
+    spectrum_R_mod = To Spectrum
+    selectObject: spectrum_R_mod
+    result_R = To Sound
+    
+    appendInfoLine: "Right channel complete"
+    
+    # Combine to stereo
+    appendInfoLine: "Creating stereo output..."
+    selectObject: result_L
+    plusObject: result_R
+    final_result = Combine to stereo
+    
+    # Cleanup stereo processing
+    removeObject: spectrum_R, matrix_R, spectrum_R_mod, result_L, result_R
+else
+    final_result = result_L
+endif
+
+# Finalize
+selectObject: final_result
+if create_stereo
+    Rename: original_name$ + "_HB_" + preset_name$ + "_STEREO"
+else
+    Rename: original_name$ + "_HB_" + preset_name$
+endif
 Scale peak: scale_peak
 
-# Play if requested
+appendInfoLine: "Done!"
+
 if play_after_processing
     Play
 endif
 
-# Clean up intermediate objects unless requested to keep
-if not keep_intermediate_objects
-    selectObject: spectrum
-    Remove
-endif
+# Cleanup
+removeObject: sound, spectrum_L, matrix_L, spectrum_L_mod
+
+appendInfoLine: "Processing complete!"
