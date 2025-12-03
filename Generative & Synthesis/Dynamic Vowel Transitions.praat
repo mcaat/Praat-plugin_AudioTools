@@ -19,9 +19,13 @@
 #   https://github.com/ShaiCohen-ops/Praat-plugin_AudioTools
 # ============================================================
 
+# ==========================================
+# DYNAMIC VOWEL TRANSITION SYNTHESIZER
+# ==========================================
+
 form Dynamic Vowel Transitions
     optionmenu Preset: 1
-        option Custom
+        option Custom (Defaults to Neutral)
         option A_to_I
         option I_to_U
         option U_to_A
@@ -50,193 +54,187 @@ endform
 
 echo Creating Dynamic Vowel Transitions...
 
-# Apply presets
-if preset > 1
-    if preset = 2
-        # A to I transition
-        start_f1 = 730
-        start_f2 = 1090
-        start_f3 = 2440
-        end_f1 = 270
-        end_f2 = 2290
-        end_f3 = 3010
-        transition_name$ = "A_to_I"
-        
-    elsif preset = 3
-        # I to U transition
-        start_f1 = 270
-        start_f2 = 2290
-        start_f3 = 3010
-        end_f1 = 300
-        end_f2 = 870
-        end_f3 = 2240
-        transition_name$ = "I_to_U"
-        
-    elsif preset = 4
-        # U to A transition
-        start_f1 = 300
-        start_f2 = 870
-        start_f3 = 2240
-        end_f1 = 730
-        end_f2 = 1090
-        end_f3 = 2440
-        transition_name$ = "U_to_A"
-        
-    elsif preset = 5
-        # All vowels - complex cycle
-        start_f1 = 730
-        start_f2 = 1090
-        start_f3 = 2440
-        end_f1 = 730
-        end_f2 = 1090
-        end_f3 = 2440
-        transition_name$ = "All_vowels"
-        
-    elsif preset = 6
-        # Vowel Cycle - smooth through all vowels
-        start_f1 = 730
-        start_f2 = 1090
-        start_f3 = 2440
-        end_f1 = 730
-        end_f2 = 1090
-        end_f3 = 2440
-        transition_name$ = "Vowel_Cycle"
-        
-    elsif preset = 7
-        # Formant Glissando - extreme transitions
-        start_f1 = 200
-        start_f2 = 800
-        start_f3 = 2000
-        end_f1 = 1000
-        end_f2 = 3000
-        end_f3 = 4000
-        transition_name$ = "Formant_Glissando"
-        
-    elsif preset = 8
-        # Whisper Transition - breathy vowels
-        start_f1 = 600
-        start_f2 = 1200
-        start_f3 = 2400
-        end_f1 = 400
-        end_f2 = 1800
-        end_f3 = 2800
-        transition_name$ = "Whisper_Transition"
-        
-    elsif preset = 9
-        # Singing Vowels - musical transitions
-        start_f1 = 550
-        start_f2 = 1100
-        start_f3 = 2350
-        end_f1 = 350
-        end_f2 = 2000
-        end_f3 = 3000
-        transition_name$ = "Singing_Vowels"
-        
-    elsif preset = 10
-        # Robot Speech - mechanical transitions
-        start_f1 = 400
-        start_f2 = 1200
-        start_f3 = 2400
-        end_f1 = 500
-        end_f2 = 1500
-        end_f3 = 2600
-        transition_name$ = "Robot_Speech"
-        
-    elsif preset = 11
-        # Alien Vowels - extreme formants
-        start_f1 = 150
-        start_f2 = 3000
-        start_f3 = 4000
-        end_f1 = 800
-        end_f2 = 1200
-        end_f3 = 3500
-        transition_name$ = "Alien_Vowels"
-        
-    elsif preset = 12
-        # Choral Shift - choir-like transitions
-        start_f1 = 500
-        start_f2 = 1000
-        start_f3 = 2200
-        end_f1 = 600
-        end_f2 = 1400
-        end_f3 = 2600
-        transition_name$ = "Choral_Shift"
-        
-    elsif preset = 13
-        # Spectral Morph - complex formant movement
-        start_f1 = 300
-        start_f2 = 900
-        start_f3 = 2100
-        end_f1 = 700
-        end_f2 = 1800
-        end_f3 = 2900
-        transition_name$ = "Spectral_Morph"
-        
-    elsif preset = 14
-        # Harmonic Transition - added harmonics
-        start_f1 = 450
-        start_f2 = 1300
-        start_f3 = 2500
-        end_f1 = 350
-        end_f2 = 1600
-        end_f3 = 2700
-        transition_name$ = "Harmonic_Transition"
-        
-    elsif preset = 15
-        # Formant Sweep - wide frequency range
-        start_f1 = 250
-        start_f2 = 700
-        start_f3 = 1800
-        end_f1 = 850
-        end_f2 = 2400
-        end_f3 = 3200
-        transition_name$ = "Formant_Sweep"
-        
-    elsif preset = 16
-        # Vocal Journey - through multiple vowels
-        start_f1 = 730
-        start_f2 = 1090
-        start_f3 = 2440
-        end_f1 = 730
-        end_f2 = 1090
-        end_f3 = 2440
-        transition_name$ = "Vocal_Journey"
-        
-    else
-        # Custom - use the selected transition
-        if preset = 2
-            start_f1 = 730; start_f2 = 1090; start_f3 = 2440
-            end_f1 = 270; end_f2 = 2290; end_f3 = 3010
-            transition_name$ = "A_to_I"
-        elsif preset = 3
-            start_f1 = 270; start_f2 = 2290; start_f3 = 3010
-            end_f1 = 300; end_f2 = 870; end_f3 = 2240
-            transition_name$ = "I_to_U"
-        elsif preset = 4
-            start_f1 = 300; start_f2 = 870; start_f3 = 2240
-            end_f1 = 730; end_f2 = 1090; end_f3 = 2440
-            transition_name$ = "U_to_A"
-        else
-            start_f1 = 730; start_f2 = 1090; start_f3 = 2440
-            end_f1 = 730; end_f2 = 1090; end_f3 = 2440
-            transition_name$ = "All_vowels"
-        endif
-    endif
+# ==========================================
+# 1. PARAMETER CONFIGURATION
+# ==========================================
+
+# Initialize variables to prevent undefined errors
+start_f1 = 500
+start_f2 = 1500
+start_f3 = 2500
+end_f1 = 500
+end_f2 = 1500
+end_f3 = 2500
+transition_name$ = "Custom"
+
+if preset = 2
+    # A to I transition
+    start_f1 = 730
+    start_f2 = 1090
+    start_f3 = 2440
+    end_f1 = 270
+    end_f2 = 2290
+    end_f3 = 3010
+    transition_name$ = "A_to_I"
+
+elsif preset = 3
+    # I to U transition
+    start_f1 = 270
+    start_f2 = 2290
+    start_f3 = 3010
+    end_f1 = 300
+    end_f2 = 870
+    end_f3 = 2240
+    transition_name$ = "I_to_U"
+
+elsif preset = 4
+    # U to A transition
+    start_f1 = 300
+    start_f2 = 870
+    start_f3 = 2240
+    end_f1 = 730
+    end_f2 = 1090
+    end_f3 = 2440
+    transition_name$ = "U_to_A"
+
+elsif preset = 5
+    # All vowels (handled in synthesis block)
+    transition_name$ = "All_vowels"
+
+elsif preset = 6
+    # Vowel Cycle (handled in synthesis block)
+    transition_name$ = "Vowel_Cycle"
+
+elsif preset = 7
+    # Formant Glissando - extreme transitions
+    start_f1 = 200
+    start_f2 = 800
+    start_f3 = 2000
+    end_f1 = 1000
+    end_f2 = 3000
+    end_f3 = 4000
+    transition_name$ = "Formant_Glissando"
+
+elsif preset = 8
+    # Whisper Transition - breathy vowels
+    start_f1 = 600
+    start_f2 = 1200
+    start_f3 = 2400
+    end_f1 = 400
+    end_f2 = 1800
+    end_f3 = 2800
+    transition_name$ = "Whisper_Transition"
+
+elsif preset = 9
+    # Singing Vowels - musical transitions
+    start_f1 = 550
+    start_f2 = 1100
+    start_f3 = 2350
+    end_f1 = 350
+    end_f2 = 2000
+    end_f3 = 3000
+    transition_name$ = "Singing_Vowels"
+
+elsif preset = 10
+    # Robot Speech - mechanical transitions
+    start_f1 = 400
+    start_f2 = 1200
+    start_f3 = 2400
+    end_f1 = 500
+    end_f2 = 1500
+    end_f3 = 2600
+    transition_name$ = "Robot_Speech"
+
+elsif preset = 11
+    # Alien Vowels - extreme formants
+    start_f1 = 150
+    start_f2 = 3000
+    start_f3 = 4000
+    end_f1 = 800
+    end_f2 = 1200
+    end_f3 = 3500
+    transition_name$ = "Alien_Vowels"
+
+elsif preset = 12
+    # Choral Shift - choir-like transitions
+    start_f1 = 500
+    start_f2 = 1000
+    start_f3 = 2200
+    end_f1 = 600
+    end_f2 = 1400
+    end_f3 = 2600
+    transition_name$ = "Choral_Shift"
+
+elsif preset = 13
+    # Spectral Morph - complex formant movement
+    start_f1 = 300
+    start_f2 = 900
+    start_f3 = 2100
+    end_f1 = 700
+    end_f2 = 1800
+    end_f3 = 2900
+    transition_name$ = "Spectral_Morph"
+
+elsif preset = 14
+    # Harmonic Transition - added harmonics
+    start_f1 = 450
+    start_f2 = 1300
+    start_f3 = 2500
+    end_f1 = 350
+    end_f2 = 1600
+    end_f3 = 2700
+    transition_name$ = "Harmonic_Transition"
+
+elsif preset = 15
+    # Formant Sweep - wide frequency range
+    start_f1 = 250
+    start_f2 = 700
+    start_f3 = 1800
+    end_f1 = 850
+    end_f2 = 2400
+    end_f3 = 3200
+    transition_name$ = "Formant_Sweep"
+
+elsif preset = 16
+    # Vocal Journey (handled in synthesis block)
+    transition_name$ = "Vocal_Journey"
 endif
 
 echo Using preset: 'preset' - 'transition_name$'
 
-# Create the vowel transition sound
-if preset = 5 or preset = 6 or preset = 16
-    # Complex cycle through all vowels
+# ==========================================
+# 2. AUDIO SYNTHESIS
+# ==========================================
+
+if preset = 5
+    # PRESET 5: All vowels (Standard complex cycle)
     formula$ = "("
     formula$ = formula$ + "0.4*sin(2*pi*120*x) + "
-    formula$ = formula$ + "0.6*sin(2*pi*(400 + 400*sin(2*pi*0.25*x))*x) + "  # F1 varies
-    formula$ = formula$ + "0.5*sin(2*pi*(1000 + 1500*(0.5+0.5*sin(2*pi*0.2*x)))*x) + "  # F2 varies
-    formula$ = formula$ + "0.3*sin(2*pi*(2000 + 1500*(0.5+0.5*sin(2*pi*0.15*x)))*x)"  # F3 varies
+    formula$ = formula$ + "0.6*sin(2*pi*(400 + 400*sin(2*pi*0.25*x))*x) + "
+    formula$ = formula$ + "0.5*sin(2*pi*(1000 + 1500*(0.5+0.5*sin(2*pi*0.2*x)))*x) + "
+    formula$ = formula$ + "0.3*sin(2*pi*(2000 + 1500*(0.5+0.5*sin(2*pi*0.15*x)))*x)"
     formula$ = formula$ + ") * (0.7 + 0.3*sin(2*pi*0.1*x)) * exp(-0.1*x/" + string$(duration) + ")"
+
+elsif preset = 6
+    # PRESET 6: Vowel Cycle (Faster, rhythmic oscillation)
+    formula$ = "("
+    formula$ = formula$ + "0.4*sin(2*pi*120*x) + "
+    formula$ = formula$ + "0.6*sin(2*pi*(400 + 400*sin(2*pi*0.5*x))*x) + "
+    formula$ = formula$ + "0.5*sin(2*pi*(1000 + 1500*(0.5+0.5*sin(2*pi*0.4*x)))*x) + "
+    formula$ = formula$ + "0.3*sin(2*pi*(2000 + 1500*(0.5+0.5*sin(2*pi*0.3*x)))*x)"
+    formula$ = formula$ + ") * (0.8 + 0.2*sin(2*pi*2.0*x)) * exp(-0.1*x/" + string$(duration) + ")"
+
+elsif preset = 16
+    # PRESET 16: Vocal Journey (Slow, deep morph)
+    formula$ = "("
+    formula$ = formula$ + "0.5*sin(2*pi*100*x) + "
+    formula$ = formula$ + "0.6*sin(2*pi*(300 + 600*sin(2*pi*0.1*x))*x) + "
+    formula$ = formula$ + "0.5*sin(2*pi*(800 + 1800*(0.5+0.5*sin(2*pi*0.08*x)))*x) + "
+    formula$ = formula$ + "0.3*sin(2*pi*(2200 + 1000*(0.5+0.5*sin(2*pi*0.12*x)))*x)"
+    formula$ = formula$ + ") * (0.6 + 0.4*sin(2*pi*0.1*x))"
+
 else
-    # Smooth transition between two vowels
+    # ALL OTHER PRESETS (Linear transition between Start and End frequencies)
     formula$ = "("
     formula$ = formula$ + "0.4*sin(2*pi*120*x) + "
     formula$ = formula$ + "0.6*sin(2*pi*(" + string$(start_f1) + " + (" + string$(end_f1) + "-" + string$(start_f1) + ")*(x/" + string$(duration) + "))*x) + "
@@ -248,7 +246,9 @@ endif
 Create Sound from formula: "vowel_output", 1, 0, duration, sampling_frequency, formula$
 Scale peak: 0.9
 
-# ====== SPATIAL PROCESSING ======
+# ==========================================
+# 3. SPATIAL PROCESSING
+# ==========================================
 select Sound vowel_output
 
 if spatial_mode = 1
