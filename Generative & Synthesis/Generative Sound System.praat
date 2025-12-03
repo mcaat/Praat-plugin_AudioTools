@@ -50,274 +50,259 @@ sample_rate = 44100
 
 # ====== SYNTHESIS ENGINE ======
 
-if synthesis_mode = 1
-    # HARMONIC DRIFT - Evolving harmonic series
+# Initialize base canvas
+if synthesis_mode = 6
+    # Mode 6 needs a noise source
+    Create Sound from formula: "gen_base", 1, 0, duration, sample_rate, "randomGauss(0, 0.5)"
+    base_id = selected("Sound")
     Create Sound from formula: "gen_output", 1, 0, duration, sample_rate, "0"
-    
+    gen_id = selected("Sound")
+else
+    # All other modes start with silence
+    Create Sound from formula: "gen_output", 1, 0, duration, sample_rate, "0"
+    gen_id = selected("Sound")
+endif
+
+# --- MODE 1: HARMONIC DRIFT ---
+if synthesis_mode = 1
     for layer from 1 to number_of_layers
         harmonic = layer
         freq = base_frequency * harmonic
         drift_rate = evolution_rate * (0.3 + layer * 0.1)
         detune = 1 + sin(layer * 1.7) * 0.02
         
-        Create Sound from formula: "layer_'layer'", 1, 0, duration, sample_rate,
-        ... "sin(2*pi*'freq'*'detune'*x + sin(2*pi*'drift_rate'*x)*2) * 
-        ... (1 / ('layer' + 1)) * 
-        ... (0.6 + sin(2*pi*'drift_rate'*0.5*x) * 0.4)"
+        # Define formula in one robust block
+        formula$ = "sin(2*pi*" + string$(freq) + "*" + string$(detune) + "*x + sin(2*pi*" + string$(drift_rate) + "*x)*2) * (1 / (" + string$(layer) + " + 1)) * (0.6 + sin(2*pi*" + string$(drift_rate) + "*0.5*x) * 0.4)"
+        
+        Create Sound from formula: "layer_" + string$(layer), 1, 0, duration, sample_rate, formula$
         
         call applyFadeEnvelope
         call addToOutput
     endfor
-    
+
+# --- MODE 2: GRANULAR CLOUD ---
 elsif synthesis_mode = 2
-    # GRANULAR CLOUD - Grain-based texture
-    Create Sound from formula: "gen_output", 1, 0, duration, sample_rate, "0"
-    
     for layer from 1 to number_of_layers
         grain_freq = base_frequency * (1 + layer * 0.3)
         grain_rate = 20 + layer * 15
         grain_density = evolution_rate * 10
         
-        Create Sound from formula: "layer_'layer'", 1, 0, duration, sample_rate,
-        ... "sin(2*pi*'grain_freq'*x) * 
-        ... (abs(sin(2*pi*'grain_rate'*x + 'layer')) > 0.7) * 
-        ... exp(-abs(sin(2*pi*'grain_rate'*x)) * 'grain_density') * 
-        ... randomGauss(0, 0.15 + sin(2*pi*'evolution_rate'*x) * 0.1)"
+        formula$ = "sin(2*pi*" + string$(grain_freq) + "*x) * (abs(sin(2*pi*" + string$(grain_rate) + "*x + " + string$(layer) + ")) > 0.7) * exp(-abs(sin(2*pi*" + string$(grain_rate) + "*x)) * " + string$(grain_density) + ") * randomGauss(0, 0.15 + sin(2*pi*" + string$(evolution_rate) + "*x) * 0.1)"
+        
+        Create Sound from formula: "layer_" + string$(layer), 1, 0, duration, sample_rate, formula$
         
         call applyFadeEnvelope
         call addToOutput
     endfor
-    
+
+# --- MODE 3: FM CHAOS ---
 elsif synthesis_mode = 3
-    # FM CHAOS - Chaotic frequency modulation
-    Create Sound from formula: "gen_output", 1, 0, duration, sample_rate, "0"
-    
     for layer from 1 to number_of_layers
         carrier = base_frequency * (1 + layer * 0.25)
         mod_freq = carrier * (1.5 + layer * 0.3)
         mod_index = 3 + sin(layer * 2.3) * 2
         chaos_rate = evolution_rate * (0.5 + layer * 0.2)
         
-        Create Sound from formula: "layer_'layer'", 1, 0, duration, sample_rate,
-        ... "sin(2*pi*'carrier'*x + 
-        ... 'mod_index' * sin(2*pi*'mod_freq'*x * (1 + sin(2*pi*'chaos_rate'*x)*0.5))) * 
-        ... (0.5 / 'number_of_layers')"
+        # This was the line causing errors. Now fixed using string construction.
+        formula$ = "sin(2*pi*" + string$(carrier) + "*x + " + string$(mod_index) + " * sin(2*pi*" + string$(mod_freq) + "*x * (1 + sin(2*pi*" + string$(chaos_rate) + "*x)*0.5))) * (0.5 / " + string$(number_of_layers) + ")"
+        
+        Create Sound from formula: "layer_" + string$(layer), 1, 0, duration, sample_rate, formula$
         
         call applyFadeEnvelope
         call addToOutput
     endfor
-    
+
+# --- MODE 4: SPECTRAL MORPH ---
 elsif synthesis_mode = 4
-    # SPECTRAL MORPH - Filter bank sweep
-    Create Sound from formula: "gen_base", 1, 0, duration, sample_rate,
-    ... "randomGauss(0, 0.3)"
-    
-    Create Sound from formula: "gen_output", 1, 0, duration, sample_rate, "0"
+    Create Sound from formula: "noise_base", 1, 0, duration, sample_rate, "randomGauss(0, 0.3)"
+    noise_id = selected("Sound")
     
     for layer from 1 to number_of_layers
-        select Sound gen_base
-        Copy: "layer_'layer'"
+        selectObject: noise_id
+        Copy: "layer_" + string$(layer)
+        layer_id = selected("Sound")
         
         center_freq = base_frequency * (1 + layer * 2)
         sweep_range = center_freq * 0.5
         sweep_rate = evolution_rate * (0.2 + layer * 0.1)
         
-        # Dynamic filter with sweeping center frequency
-        Formula: "self * (1 + sin(2*pi*('center_freq' + 'sweep_range' * sin(2*pi*'sweep_rate'*x))*x/44100) * 0.5)"
+        # Using string$ ensures values are inserted as numbers, not variable references
+        formula$ = "self * (1 + sin(2*pi*(" + string$(center_freq) + " + " + string$(sweep_range) + " * sin(2*pi*" + string$(sweep_rate) + "*x))*x/44100) * 0.5)"
+        Formula: formula$
         
         Filter (pass Hann band): center_freq * 0.7, center_freq * 1.5, 100
-        Rename: "layer_'layer'_filtered"
-        
-        call applyFadeEnvelope
-        
-        # Add back to output
-        select Sound gen_output
-        Formula: "self + Sound_layer_'layer'_filtered[] / 'number_of_layers'"
-        
-        select Sound layer_'layer'
-        plus Sound layer_'layer'_filtered
-        Remove
-    endfor
-    
-    select Sound gen_base
-    Remove
-    
-elsif synthesis_mode = 5
-    # RHYTHMIC PULSE - Synced pulse trains
-    Create Sound from formula: "gen_output", 1, 0, duration, sample_rate, "0"
-    
-    for layer from 1 to number_of_layers
-        pulse_freq = base_frequency * (1 + layer * 0.5)
-        rhythm_rate = evolution_rate * (1 + layer * 0.5)
-        
-        Create Sound from formula: "layer_'layer'", 1, 0, duration, sample_rate,
-        ... "(abs(sin(2*pi*'pulse_freq'*x)) > 0.95) * 
-        ... sin(2*pi*'pulse_freq'*x) * 
-        ... (0.5 + sin(2*pi*'rhythm_rate'*x) * 0.5) * 
-        ... (1 / sqrt('layer'))"
         
         call applyFadeEnvelope
         call addToOutput
     endfor
     
-elsif synthesis_mode = 6
-    # SUBTRACTIVE NOISE - Filtered evolving noise
-    Create Sound from formula: "gen_output", 1, 0, duration, sample_rate,
-    ... "randomGauss(0, 0.5)"
-    
+    selectObject: noise_id
+    Remove
+
+# --- MODE 5: RHYTHMIC PULSE ---
+elsif synthesis_mode = 5
     for layer from 1 to number_of_layers
-        select Sound gen_output
-        Copy: "layer_'layer'"
+        pulse_freq = base_frequency * (1 + layer * 0.5)
+        rhythm_rate = evolution_rate * (1 + layer * 0.5)
+        
+        formula$ = "(abs(sin(2*pi*" + string$(pulse_freq) + "*x)) > 0.95) * sin(2*pi*" + string$(pulse_freq) + "*x) * (0.5 + sin(2*pi*" + string$(rhythm_rate) + "*x) * 0.5) * (1 / sqrt(" + string$(layer) + "))"
+        
+        Create Sound from formula: "layer_" + string$(layer), 1, 0, duration, sample_rate, formula$
+        
+        call applyFadeEnvelope
+        call addToOutput
+    endfor
+
+# --- MODE 6: SUBTRACTIVE NOISE ---
+elsif synthesis_mode = 6
+    for layer from 1 to number_of_layers
+        selectObject: base_id
+        Copy: "layer_" + string$(layer)
+        layer_id = selected("Sound")
         
         filter_freq = base_frequency * (2 ^ layer)
         resonance = 50 + layer * 30
         sweep_rate = evolution_rate * 0.3
         
-        # Apply resonant filter with modulation
-        Formula: "self * (1 + sin(2*pi*'filter_freq'*(1 + sin(2*pi*'sweep_rate'*x)*0.3)*x/44100) * 0.8)"
+        formula$ = "self * (1 + sin(2*pi*" + string$(sweep_rate) + "*x)*0.3)"
+        Formula: formula$
         
         Filter (pass Hann band): filter_freq * 0.8, filter_freq * 1.2, resonance
-        Rename: "layer_'layer'_filtered"
         
-        select Sound layer_'layer'_filtered
         call applyFadeEnvelope
-        
-        select Sound gen_output
-        Formula: "self * 0.3 + Sound_layer_'layer'_filtered[] / 'number_of_layers'"
-        
-        select Sound layer_'layer'
-        plus Sound layer_'layer'_filtered
-        Remove
+        call addToOutput
     endfor
+    
+    selectObject: base_id
+    Remove
 endif
 
 # ====== SPATIAL PROCESSING ======
 
-select Sound gen_output
+selectObject: gen_id
 
 if spatial_mode = 1
-    # MONO - Keep as is
-    Rename: "generative_system"
-    output = selected("Sound")
+    # MONO
+    output_id = gen_id
     
 elsif spatial_mode = 2
-    # STEREO WIDE - Static wide image
+    # STEREO WIDE
     Copy: "gen_left"
-    left_sound = selected("Sound")
+    left_id = selected("Sound")
     
-    select Sound gen_output
+    selectObject: gen_id
     Copy: "gen_right"
-    right_sound = selected("Sound")
+    right_id = selected("Sound")
     
-    # Add slight detuning and delay for width
-    select left_sound
+    selectObject: left_id
     Formula: "self * 0.95"
     
-    select right_sound
+    selectObject: right_id
     Formula: "Sound_gen_left[col + 50] * 1.05 + self * 0.05"
     
-    select left_sound
-    plus right_sound
+    selectObject: left_id
+    plusObject: right_id
     Combine to stereo
-    Rename: "generative_system"
-    output = selected("Sound")
+    output_id = selected("Sound")
     
-    select left_sound
-    plus right_sound
+    selectObject: left_id
+    plusObject: right_id
     Remove
     
 elsif spatial_mode = 3
-    # ROTATING - Circular panning
+    # ROTATING
     Copy: "gen_left"
-    left_sound = selected("Sound")
+    left_id = selected("Sound")
     
-    select Sound gen_output
+    selectObject: gen_id
     Copy: "gen_right"
-    right_sound = selected("Sound")
+    right_id = selected("Sound")
     
-    # Apply rotation (0.25 Hz rotation)
     rotation_rate = 0.25
-    select left_sound
-    Formula: "self * (0.5 + cos(2*pi*'rotation_rate'*x) * 0.5)"
+    selectObject: left_id
+    Formula: "self * (0.5 + cos(2*pi*" + string$(rotation_rate) + "*x) * 0.5)"
     
-    select right_sound
-    Formula: "Sound_gen_output[] * (0.5 + sin(2*pi*'rotation_rate'*x) * 0.5)"
+    selectObject: right_id
+    # Note: referencing original mono source for phase coherence
+    Formula: "Sound_gen_output[] * (0.5 + sin(2*pi*" + string$(rotation_rate) + "*x) * 0.5)"
     
-    select left_sound
-    plus right_sound
+    selectObject: left_id
+    plusObject: right_id
     Combine to stereo
-    Rename: "generative_system"
-    output = selected("Sound")
+    output_id = selected("Sound")
     
-    select left_sound
-    plus right_sound
+    selectObject: left_id
+    plusObject: right_id
     Remove
     
 elsif spatial_mode = 4
-    # BINAURAL - Phase and spectral differences
-    
-    # Left channel: low-pass emphasis
+    # BINAURAL
     Copy: "gen_left"
-    left_sound = selected("Sound")
+    left_id = selected("Sound")
     Filter (pass Hann band): 0, base_frequency * 8, 100
     Scale intensity: 72
     
-    # Right channel: high-pass emphasis with delay
-    select Sound gen_output
+    selectObject: gen_id
     Copy: "gen_right"
-    right_sound = selected("Sound")
+    right_id = selected("Sound")
     
-    # Create delayed version for phase shift
     delay_samples = 100
-    Formula: "if col > 'delay_samples' then self[col - 'delay_samples'] else 0 fi"
+    Formula: "if col > " + string$(delay_samples) + " then self[col - " + string$(delay_samples) + "] else 0 fi"
     Filter (pass Hann band): base_frequency * 2, 0, 100
     Scale intensity: 72
     
-    select left_sound
-    plus right_sound
+    selectObject: left_id
+    plusObject: right_id
     Combine to stereo
-    Rename: "generative_system"
-    output = selected("Sound")
+    output_id = selected("Sound")
     
-    select left_sound
-    plus right_sound
+    selectObject: left_id
+    plusObject: right_id
     Remove
 endif
 
 # ====== FINALIZE ======
 
-select output
+selectObject: output_id
+Rename: "Generative_System"
 
 # Normalize
 if normalize_output
     Scale peak: 0.85
 endif
 
-# Play
 Play
 
-# Clean up and select final output
-select Sound gen_output
-Remove
+# CLEANUP LOGIC
+if output_id != gen_id
+    selectObject: gen_id
+    Remove
+    selectObject: output_id
+endif
 
-select output
+echo Generative System Complete.
+echo Mode: 'synthesis_mode' | Spatial: 'spatial_mode'
 
 # ====== PROCEDURES ======
 
 procedure applyFadeEnvelope
     if fade_time > 0
-        fade_samples = fade_time * sample_rate
-        total_samples = duration * sample_rate
-        Formula: "if col < 'fade_samples' then self * (col/'fade_samples') 
-        ... else if col > ('total_samples' - 'fade_samples') then self * (('total_samples' - col)/'fade_samples') 
-        ... else self fi fi"
+        fs = fade_time * sample_rate
+        ts = duration * sample_rate
+        
+        # We use string concatenation for formulas inside procedures too, to be safe
+        form_fade$ = "if col < " + string$(fs) + " then self * (col/" + string$(fs) + ") else if col > (" + string$(ts) + " - " + string$(fs) + ") then self * ((" + string$(ts) + " - col)/" + string$(fs) + ") else self fi fi"
+        Formula: form_fade$
     endif
 endproc
 
 procedure addToOutput
-    select Sound gen_output
-    Formula: "self + Sound_layer_'layer'[] / 'number_of_layers'"
+    current_layer_id = selected("Sound")
+    selectObject: gen_id
     
-    select Sound layer_'layer'
+    # We reference the layer by valid syntax
+    Formula: "self + Sound_layer_" + string$(layer) + "[] / " + string$(number_of_layers)
+    
+    selectObject: current_layer_id
     Remove
 endproc
