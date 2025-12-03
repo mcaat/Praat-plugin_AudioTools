@@ -25,41 +25,50 @@ form Direct Formula Markov Synthesis
     integer Number_states 8
     real Base_frequency 100
     real Event_density 5.0
-    choice Markov_type: 1
-    button Simple_chain
-    button Circular_chain
-    button Random_walk
-    button Biased_chain
+    optionmenu Markov_type: 1
+        option Simple_chain
+        option Circular_chain
+        option Random_walk
+        option Biased_chain
     boolean Enable_harmonics yes
     boolean Enable_envelopes yes
     real Transition_randomness 0.3
 endform
 
-echo Building Advanced Markov Chain Formula...
+echo Building Markov Chain Formula...
+
+# Initialize vectors (Required for Praat to use arrays)
+state_freq# = zero#(number_states)
+state_dur# = zero#(number_states)
+state_amp# = zero#(number_states)
+state_bw# = zero#(number_states)
+state_history# = zero#(1000)
 
 total_events = round(duration * event_density)
 formula$ = "0"
 
 current_state = randomInteger(1, number_states)
 
+# Define State Properties
 for state from 1 to number_states
-    state_freq[state] = base_frequency * (2^((state-1)/number_states))
-    state_dur[state] = 0.15 + (state/number_states) * 0.2
-    state_amp[state] = 0.4 + (state/number_states) * 0.4
-    state_bw[state] = 0.1 + (state/number_states) * 0.4
+    state_freq#[state] = base_frequency * (2^((state-1)/number_states))
+    state_dur#[state] = 0.15 + (state/number_states) * 0.2
+    state_amp#[state] = 0.4 + (state/number_states) * 0.4
+    state_bw#[state] = 0.1 + (state/number_states) * 0.4
 endfor
 
 current_time = 0
 event_count = 0
-state_history[1] = current_state
+state_history#[1] = current_state
 
+# Build the Giant Formula
 while current_time < duration and event_count < total_events * 3
     event_count = event_count + 1
     
-    current_freq = state_freq[current_state]
-    current_dur = state_dur[current_state] * (0.7 + 0.6 * randomUniform(0,1))
-    current_amp = state_amp[current_state] * (0.8 + 0.4 * randomUniform(0,1))
-    current_bw = state_bw[current_state]
+    current_freq = state_freq#[current_state]
+    current_dur = state_dur#[current_state] * (0.7 + 0.6 * randomUniform(0,1))
+    current_amp = state_amp#[current_state] * (0.8 + 0.4 * randomUniform(0,1))
+    current_bw = state_bw#[current_state]
     
     if current_time + current_dur > duration
         current_dur = duration - current_time
@@ -100,6 +109,7 @@ while current_time < duration and event_count < total_events * 3
     
     old_state = current_state
     
+    # Markov Logic
     if markov_type = 1
         r = randomUniform(0,1)
         if r < 0.6 - transition_randomness/2
@@ -139,22 +149,36 @@ while current_time < duration and event_count < total_events * 3
         endif
     endif
     
-    state_history[event_count] = current_state
+    if event_count < 1000
+        state_history#[event_count] = current_state
+    endif
     current_time = current_time + current_dur
     
     if event_count mod 50 = 0
-        echo Built 'event_count' events, time: 'current_time:2'/'duration:2'
+        echo Built 'event_count' events...
     endif
 endwhile
 
-echo Creating final sound...
-Create Sound from formula... markov_result 1 0 duration sampling_frequency 'formula$'
+echo Synthesizing...
+Create Sound from formula: "markov_raw", 1, 0, duration, sampling_frequency, formula$
 
-Copy... markov_filtered
-Filter (pass Hann band)... base_frequency*0.5 base_frequency*8 100
+# Filter and Finalize
+Copy: "markov_filtered"
+Filter (pass Hann band): base_frequency*0.5, base_frequency*8, 100
+Scale peak: 0.9
 
-Scale peak... 0.9
+# Rename to final output
+Rename: "Markov_Synthesis"
 
-echo Advanced Markov Synthesis complete!
+# CLEANUP: Remove the raw and intermediate files
+selectObject: "Sound markov_raw"
+Remove
+selectObject: "Sound markov_filtered"
+Remove
+
+# Select and Play the final result
+selectObject: "Sound Markov_Synthesis"
+Play
+
+echo Markov Synthesis complete!
 echo Total events: 'event_count'
-echo Final states visited: 'number_states'
