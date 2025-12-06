@@ -20,10 +20,28 @@
 # ============================================================
 
 # ============================================================
-# Auto-Harmonic Layering - One-Step Loop Harmonizer 
+# Praat AudioTools - Auto-Harmonic Layering (Enhanced)
+# Author: Shai Cohen
+# Affiliation: Department of Music, Bar-Ilan University, Israel
+# Email: shai.cohen@biu.ac.il
+# Version: 0.3 (2025)
+# License: MIT License
+# Repository: https://github.com/ShaiCohen-ops/Praat-plugin_AudioTools
+#
+# Description:
+#   Auto-Harmonic Layering with enhanced features:
+#   - Each loop gets consistent harmony across all repeats
+#   - Control over harmonization time range
+#   - Mono output option
+#   - Fade-in/fade-out on chords for smooth blending
+#   - Individual chord level control
+#
+# Citation:
+#   Cohen, S. (2025). Praat AudioTools: An Offline Analysis–Resynthesis Toolkit for Experimental Composition.
+#   https://github.com/ShaiCohen-ops/Praat-plugin_AudioTools
 # ============================================================
 
-form One-Step Loop Harmonizer
+form One-Step Loop Harmonizer (Enhanced)
     comment === LOOP DETECTION SETTINGS ===
     positive Time_step 0.05
     positive Pitch_floor 75
@@ -43,6 +61,22 @@ form One-Step Loop Harmonizer
         option Sus4
         option Sus2
         option Random
+    
+    comment === HARMONIZATION SCOPE ===
+    boolean Harmonize_repeats 1
+    real Harmonize_until_time 0
+    
+    comment === CHORD MIXING LEVELS (0-1) ===
+    real Root_level 1.0
+    real Note_2_level 0.8
+    real Note_3_level 0.6
+    
+    comment === ENVELOPE SETTINGS ===
+    positive Fade_duration 0.01
+    boolean Apply_fades 1
+    
+    comment === OUTPUT FORMAT ===
+    boolean Output_mono 0
 endform
 
 # ===================================================================
@@ -56,6 +90,7 @@ endif
 originalID = selected("Sound")
 originalName$ = selected$("Sound")
 
+writeInfoLine: "=== AUTO-HARMONIC LAYERING ==="
 appendInfoLine: "--- Analyzing Pitch & Loops ---"
 
 # 1. Extract Pitch
@@ -92,6 +127,7 @@ Formula: "if Matrix_ThePitchData[row, 1] > 0 and Matrix_ThePitchData[col, 1] > 0
 
 # 4. Find Candidates
 selectObject: originalID
+total_duration = Get total duration
 To TextGrid: "Loops Repeats", ""
 textgridID = selected("TextGrid")
 
@@ -165,6 +201,8 @@ while loops_found < num_loops_to_find and row_index > 0
     len_f = Get value: row_index, "length_frames"
     gap_f = Get value: row_index, "gap_frames"
     
+    # TIMING CALCULATION (Verified - Correct!)
+    # Frames are 1-indexed, so (start_f - 1) converts to time
     t1 = (start_f - 1) * time_step
     dur = len_f * time_step
     t2 = t1 + dur
@@ -200,14 +238,67 @@ while loops_found < num_loops_to_find and row_index > 0
     row_index = row_index - 1
 endwhile
 
+appendInfoLine: "Found ", loops_found, " loops"
+
 # CLEANUP Phase 1
 removeObject: dataID, ssmID, tableID
+
+# ===================================================================
+# PHASE 1B: ASSIGN CHORD TYPES TO EACH LOOP NUMBER
+# ===================================================================
+
+# NEW: Assign one chord type per loop number (not per event!)
+# Initialize array explicitly
+for loop_num to loops_found
+    chord_for_loop'loop_num' = 0
+endfor
+
+for loop_num to loops_found
+    if chord_Type = 7
+        # Random: Choose between 1 and 6
+        chord_for_loop'loop_num' = randomInteger(1, 6)
+    else
+        # Use the specific user selection
+        chord_for_loop'loop_num' = chord_Type
+    endif
+endfor
+
+# Report chord assignments
+appendInfoLine: ""
+appendInfoLine: "Chord assignments:"
+for loop_num to loops_found
+    c = chord_for_loop'loop_num'
+    if c = 1
+        chord_name$ = "Octave Doubling"
+    elsif c = 2
+        chord_name$ = "Fifth"
+    elsif c = 3
+        chord_name$ = "Major"
+    elsif c = 4
+        chord_name$ = "Minor"
+    elsif c = 5
+        chord_name$ = "Sus4"
+    else
+        chord_name$ = "Sus2"
+    endif
+    appendInfoLine: "  Loop ", loop_num, ": ", chord_name$
+endfor
 
 # ===================================================================
 # PHASE 2: HARMONIZATION
 # ===================================================================
 
+appendInfoLine: ""
 appendInfoLine: "--- Generating Harmonies ---"
+
+# Set harmonization end time
+if harmonize_until_time <= 0
+    harm_end_time = total_duration
+else
+    harm_end_time = min(harmonize_until_time, total_duration)
+endif
+
+appendInfoLine: "Harmonizing until: ", fixed$(harm_end_time, 2), " s"
 
 # 1. Auto-Mono Conversion
 selectObject: originalID
@@ -220,34 +311,66 @@ else
 endif
 
 selectObject: soundID
-total_duration = Get total duration
 fs = Get sampling frequency
 
 # 2. Collect Events
 selectObject: textgridID
 nTiers = Get number of tiers
 nEvents = 0
+skipped_events = 0
 
 for t to nTiers
     nInt = Get number of intervals: t
     for i to nInt
         lab$ = Get label of interval: t, i
-        if startsWith(lab$, "Loop") or startsWith(lab$, "Repeat")
-            nEvents = nEvents + 1
-            event_start[nEvents] = Get start point: t, i
-            event_end[nEvents] = Get end point: t, i
+        
+        # Check if this is a Loop or Repeat
+        is_loop = startsWith(lab$, "Loop")
+        is_repeat = startsWith(lab$, "Repeat")
+        
+        if is_loop or is_repeat
+            event_start_time = Get start point: t, i
+            event_end_time = Get end point: t, i
             
-            # --- CHORD SELECTION LOGIC ---
-            if chord_Type = 7
-                # Random: Choose between 1 and 6
-                event_chord[nEvents] = randomInteger(1, 6)
+            # NEW: Apply filters
+            should_include = 1
+            
+            # Filter 1: Skip repeats if user disabled them
+            if is_repeat and not harmonize_repeats
+                should_include = 0
+            endif
+            
+            # Filter 2: Skip events that start after the harmonization end time
+            if event_start_time >= harm_end_time
+                should_include = 0
+            endif
+            
+            if should_include
+                nEvents = nEvents + 1
+                event_start[nEvents] = event_start_time
+                
+                # Clip event end to harmonization limit
+                event_end[nEvents] = min(event_end_time, harm_end_time)
+                
+                # Extract loop number from label and use its assigned chord
+                if is_loop
+                    loop_num_str$ = replace$(lab$, "Loop ", "", 1)
+                else
+                    loop_num_str$ = replace$(lab$, "Repeat ", "", 1)
+                endif
+                loop_num = number(loop_num_str$)
+                
+                event_chord[nEvents] = chord_for_loop'loop_num'
             else
-                # Use the specific user selection
-                event_chord[nEvents] = chord_Type
+                skipped_events = skipped_events + 1
             endif
         endif
     endfor
 endfor
+
+if skipped_events > 0
+    appendInfoLine: "Skipped ", skipped_events, " events (outside harmonization range or repeats disabled)"
+endif
 
 # Sort Events
 for i to nEvents
@@ -291,6 +414,16 @@ for i to nEvents
     @generateChord: clipID, chordType
     partID = selected("Sound")
     
+    # Apply fade-in/fade-out
+    if apply_fades
+        selectObject: partID
+        dur = Get total duration
+        fade_in = min(fade_duration, dur/4)
+        fade_out = min(fade_duration, dur/4)
+        Fade in: 0, 0, fade_in, "yes"
+        Fade out: 0, dur, -fade_out, "yes"
+    endif
+    
     selectObject: partID
     Scale peak: mix_volume
     
@@ -312,7 +445,7 @@ for i to nEvents
     current_time = event_end[i]
 endfor
 
-# D. Final Gap
+# D. Final Gap (to match total duration)
 gap = total_duration - current_time
 if gap > 0.001
     Create Sound from formula: "EndGap", 1, 0, gap, fs, "0"
@@ -330,14 +463,24 @@ if gap > 0.001
 endif
 
 selectObject: chainID
-Rename: "Harmonized_Track_Mono"
+Rename: "Harmonized_Track"
 
 # 4. Final Mix
 selectObject: originalID
 plusObject: chainID
-Combine to stereo
-Rename: "Final_Mix_With_Chords"
-finalID = selected("Sound")
+
+if output_mono
+    # Mono output option
+    stereoID = Combine to stereo
+    finalID = Convert to mono
+    Rename: "Final_Mix_Mono"
+    removeObject: stereoID
+else
+    # Stereo output
+    Combine to stereo
+    Rename: "Final_Mix_Stereo"
+    finalID = selected("Sound")
+endif
 
 # ===================================================================
 # PHASE 3: FINAL CLEANUP
@@ -345,7 +488,17 @@ finalID = selected("Sound")
 
 removeObject: textgridID, soundID, chainID
 
-appendInfoLine: "Done! Cleaned all temporary objects."
+appendInfoLine: ""
+appendInfoLine: "=== COMPLETE ==="
+appendInfoLine: "Events harmonized: ", nEvents
+if apply_fades
+    appendInfoLine: "Fade duration: ", fade_duration, " s"
+endif
+if output_mono
+    appendInfoLine: "Output: Mono"
+else
+    appendInfoLine: "Output: Stereo"
+endif
 
 selectObject: finalID
 Play
@@ -386,11 +539,12 @@ procedure generateChord: .srcID, .type
     
     .semitone = 2 ^ (1/12)
     
-    # 1. Root
+    # 1. Root (with level control)
     selectObject: .srcID
     .root = Copy: "root"
+    Scale peak: root_level
     
-    # 2. Note 2
+    # 2. Note 2 (with level control)
     selectObject: .srcID
     .n2 = Copy: "n2"
     .ratio = .semitone ^ .i2
@@ -406,11 +560,12 @@ procedure generateChord: .srcID, .type
     .res2 = Get resynthesis (overlap-add)
     selectObject: .res2
     .final2 = Resample: .fs, 50
+    Scale peak: note_2_level
     
     # CLEANUP NOTE 2
     removeObject: .n2, .m, .d, .res2
     
-    # 3. Note 3
+    # 3. Note 3 (with level control)
     selectObject: .srcID
     .n3 = Copy: "n3"
     .ratio = .semitone ^ .i3
@@ -426,6 +581,7 @@ procedure generateChord: .srcID, .type
     .res3 = Get resynthesis (overlap-add)
     selectObject: .res3
     .final3 = Resample: .fs, 50
+    Scale peak: note_3_level
     
     # CLEANUP NOTE 3
     removeObject: .n3, .m, .d, .res3
