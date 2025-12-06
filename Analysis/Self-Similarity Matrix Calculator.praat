@@ -20,20 +20,13 @@
 # ============================================================
 
 # ============================================================
-# Self-Similarity Matrix - Multi-Feature (COMPLETE)
-# ============================================================
-# Compare audio across time using different features:
-# - Pitch: melodic/harmonic similarity
-# - Pitch+Intensity: dynamics + melody
-# - MFCC: spectral timbre similarity (slow, best quality)
-# - Spectral Entropy: texture/complexity similarity
-# - LPC: vocal tract/formant similarity
-# - Mel Features: perceptually-weighted spectrum
+# Praat AudioTools - Self-Similarity Matrix Calculator
+# Method: Standard Extraction (Robust) + Turbo SSM (Fast)
 # ============================================================
 
 form Self-Similarity Matrix
     comment === FEATURE CHOICE ===
-    optionmenu feature_type: 1
+    optionmenu feature_type: 3
         option Pitch only (fastest)
         option Pitch + Intensity
         option MFCC (best quality)
@@ -55,7 +48,6 @@ form Self-Similarity Matrix
     
     comment === LPC SETTINGS (for option 5) ===
     positive lpc_order 16
-    comment (Typical: 12-16 for speech, 10-12 for music)
     
     comment === MEL SETTINGS (for option 6) ===
     positive num_mel_bands 40
@@ -69,9 +61,7 @@ form Self-Similarity Matrix
     comment === SPEED OPTIMIZATION ===
     boolean use_downsampling 1
     positive processing_sample_rate 22050
-    
     positive frame_decimation 1
-    comment (1=all frames, 2=2x faster, 5=5x faster, 10=10x faster)
     
     comment === VISUALIZATION ===
     boolean draw_matrix 1
@@ -94,7 +84,6 @@ original_sr = Get sampling frequency
 
 writeInfoLine: "=== SELF-SIMILARITY MATRIX ==="
 appendInfoLine: "Sound: ", originalName$
-appendInfoLine: "Duration: ", fixed$(original_duration, 2), " s"
 
 if feature_type = 1
     feature_name$ = "Pitch"
@@ -111,7 +100,6 @@ else
 endif
 
 appendInfoLine: "Feature: ", feature_name$
-appendInfoLine: ""
 
 # ===================================================================
 # DOWNSAMPLE
@@ -121,12 +109,10 @@ workingID = originalID
 did_downsample = 0
 
 if use_downsampling and processing_sample_rate < original_sr
-    appendInfo: "Downsampling to ", processing_sample_rate, " Hz..."
     selectObject: originalID
     downsampledID = Resample: processing_sample_rate, 50
     workingID = downsampledID
     did_downsample = 1
-    appendInfoLine: " done"
 endif
 
 # ===================================================================
@@ -136,566 +122,341 @@ endif
 selectObject: workingID
 
 if feature_type = 1
-    # ===============================================================
-    # PITCH ONLY
-    # ===============================================================
-    appendInfo: "Extracting pitch..."
+    # --- PITCH ---
     To Pitch: time_step, pitch_floor, pitch_ceiling
     pitchID = selected("Pitch")
-    
     total_frames = Get number of frames
     num_frames = ceiling(total_frames / frame_decimation)
     num_features = 1
-    
-    Create simple Matrix: "features", num_frames, num_features, "0"
+    Create simple Matrix: "TheFeatureData", num_frames, num_features, "0"
     featureMatrixID = selected("Matrix")
     
     selectObject: pitchID
-    output_frame = 0
-    for frame to total_frames
-        if (frame - 1) mod frame_decimation = 0
-            output_frame = output_frame + 1
-            
-            pitch_val = Get value in frame: frame, "Hertz"
-            if pitch_val = undefined
-                pitch_val = 0
+    out_f = 0
+    for i to total_frames
+        if (i - 1) mod frame_decimation = 0
+            out_f = out_f + 1
+            val = Get value in frame: i, "Hertz"
+            if val = undefined
+                val = 0
             endif
-            
             selectObject: featureMatrixID
-            Set value: output_frame, 1, pitch_val
+            Set value: out_f, 1, val
             selectObject: pitchID
         endif
     endfor
-    
     removeObject: pitchID
-    appendInfoLine: " done (", num_frames, " frames)"
-    
+
 elsif feature_type = 2
-    # ===============================================================
-    # PITCH + INTENSITY
-    # ===============================================================
-    appendInfo: "Extracting pitch + intensity..."
-    
+    # --- PITCH + INTENSITY ---
     To Pitch: time_step, pitch_floor, pitch_ceiling
     pitchID = selected("Pitch")
-    
     selectObject: workingID
     To Intensity: pitch_floor, time_step, "yes"
-    intensityID = selected("Intensity")
+    intID = selected("Intensity")
     
     selectObject: pitchID
     total_frames = Get number of frames
     num_frames = ceiling(total_frames / frame_decimation)
     num_features = 2
-    
-    Create simple Matrix: "features", num_frames, num_features, "0"
+    Create simple Matrix: "TheFeatureData", num_frames, num_features, "0"
     featureMatrixID = selected("Matrix")
     
-    output_frame = 0
-    for frame to total_frames
-        if (frame - 1) mod frame_decimation = 0
-            output_frame = output_frame + 1
-            
+    out_f = 0
+    for i to total_frames
+        if (i - 1) mod frame_decimation = 0
+            out_f = out_f + 1
             selectObject: pitchID
-            pitch_val = Get value in frame: frame, "Hertz"
-            if pitch_val = undefined
-                pitch_val = 0
+            pval = Get value in frame: i, "Hertz"
+            if pval = undefined
+                pval = 0
             endif
-            
-            selectObject: intensityID
-            int_val = Get value in frame: frame
-            if int_val = undefined
-                int_val = 0
+            selectObject: intID
+            ival = Get value in frame: i
+            if ival = undefined
+                ival = 0
             endif
-            
             selectObject: featureMatrixID
-            Set value: output_frame, 1, pitch_val
-            Set value: output_frame, 2, int_val
+            Set value: out_f, 1, pval
+            Set value: out_f, 2, ival
         endif
     endfor
-    
-    removeObject: pitchID, intensityID
-    appendInfoLine: " done (", num_frames, " frames)"
-    
+    removeObject: pitchID, intID
+
 elsif feature_type = 3
-    # ===============================================================
-    # MFCC
-    # ===============================================================
-    appendInfo: "Extracting MFCCs..."
-    
-    current_sr = Get sampling frequency
-    nyquist = current_sr / 2
-    
-    To MFCC: number_of_mfcc, window_length, time_step, 100, 100, nyquist
+    # --- MFCC ---
+    To MFCC: number_of_mfcc, window_length, time_step, 100, 100, 0
     mfccID = selected("MFCC")
-    
     total_frames = Get number of frames
     num_frames = ceiling(total_frames / frame_decimation)
     num_features = number_of_mfcc
-    
-    Create simple Matrix: "features", num_frames, num_features, "0"
+    Create simple Matrix: "TheFeatureData", num_frames, num_features, "0"
     featureMatrixID = selected("Matrix")
     
     selectObject: mfccID
-    output_frame = 0
-    for frame to total_frames
-        if (frame - 1) mod frame_decimation = 0
-            output_frame = output_frame + 1
-            
-            for coef to num_features
-                value = Get value in frame: frame, coef
-                
+    out_f = 0
+    for i to total_frames
+        if (i - 1) mod frame_decimation = 0
+            out_f = out_f + 1
+            for c to num_features
+                val = Get value in frame: i, c
                 selectObject: featureMatrixID
-                Set value: output_frame, coef, value
+                Set value: out_f, c, val
                 selectObject: mfccID
             endfor
         endif
-        
-        if frame mod 100 = 0
-            appendInfo: "."
-        endif
     endfor
-    
     removeObject: mfccID
-    appendInfoLine: " done (", num_frames, " frames)"
-    
+
 elsif feature_type = 4
-    # ===============================================================
-    # SPECTRAL ENTROPY
-    # ===============================================================
-    appendInfo: "Extracting spectral entropy..."
-    
-    current_sr = Get sampling frequency
-    nyquist = current_sr / 2
-    
-    freq_min = freq_min_entropy
-    freq_max = freq_max_entropy
-    
-    if freq_max > nyquist
-        freq_max = nyquist
-    endif
-    
-    To Spectrogram: window_length, nyquist, time_step, 20, "Gaussian"
-    spectrogramID = selected("Spectrogram")
+    # --- SPECTRAL ENTROPY (Restored to Standard Method) ---
+    To Spectrogram: window_length, 8000, time_step, 20, "Gaussian"
+    specID = selected("Spectrogram")
     
     start_time = Get start time
     end_time = Get end time
     time_duration = end_time - start_time
+    total_time_frames = floor(time_duration / time_step)
     
-    total_time_frames = floor(time_duration / time_step) + 1
     num_frames = ceiling(total_time_frames / frame_decimation)
     num_features = 1
     
-    freq_step = (freq_max - freq_min) / num_freq_bands
-    
-    Create simple Matrix: "features", num_frames, num_features, "0"
+    Create simple Matrix: "TheFeatureData", num_frames, num_features, "0"
     featureMatrixID = selected("Matrix")
     
-    selectObject: spectrogramID
+    freq_step = (freq_max_entropy - freq_min_entropy) / num_freq_bands
     
-    output_frame = 0
-    for t_idx to total_time_frames
-        if (t_idx - 1) mod frame_decimation = 0
-            output_frame = output_frame + 1
+    selectObject: specID
+    out_f = 0
+    for i to total_time_frames
+        if (i - 1) mod frame_decimation = 0
+            out_f = out_f + 1
             
-            time = start_time + (t_idx - 1) * time_step
+            # Robust time calculation
+            time = start_time + (i - 0.5) * time_step
             
-            # Calculate total power
-            total_power = 0
-            
-            for band to num_freq_bands
-                freq = freq_min + (band - 1) * freq_step
-                power = Get power at: time, freq
-                
-                if power > 0
-                    total_power = total_power + power
+            # Sum power
+            tot_p = 0
+            entropy = 0
+            for b to num_freq_bands
+                freq = freq_min_entropy + (b-1)*freq_step
+                p = Get power at: time, freq
+                if p > 0
+                    tot_p = tot_p + p
                 endif
             endfor
             
-            # Calculate entropy
-            entropy = 0
-            
-            if total_power > 0
-                for band to num_freq_bands
-                    freq = freq_min + (band - 1) * freq_step
-                    power = Get power at: time, freq
-                    
-                    if power > 0
-                        p = power / total_power
-                        entropy = entropy - (p * ln(p))
+            # Calculate Entropy
+            if tot_p > 0
+                for b to num_freq_bands
+                    freq = freq_min_entropy + (b-1)*freq_step
+                    p = Get power at: time, freq
+                    if p > 0
+                        prob = p / tot_p
+                        entropy = entropy - (prob * ln(prob))
                     endif
                 endfor
             endif
             
             selectObject: featureMatrixID
-            Set value: output_frame, 1, entropy
-            
-            selectObject: spectrogramID
-        endif
-        
-        if t_idx mod 50 = 0
-            appendInfo: "."
+            Set value: out_f, 1, entropy
+            selectObject: specID
         endif
     endfor
-    
-    removeObject: spectrogramID
-    appendInfoLine: " done (", num_frames, " frames)"
-    
+    removeObject: specID
+
 elsif feature_type = 5
-    # ===============================================================
-    # LPC (Linear Predictive Coding)
-    # ===============================================================
-    appendInfo: "Extracting LPC..."
-    
+    # --- LPC ---
     To LPC (autocorrelation): lpc_order, window_length, time_step, 50
     lpcID = selected("LPC")
-    
-    total_frames = Get number of frames
-    
-    # Convert to Matrix
     Down to Matrix (lpc)
-    lpcMatrixTempID = selected("Matrix")
+    matID = selected("Matrix")
+    Transpose
+    transID = selected("Matrix")
     
-    # Check orientation
     num_rows = Get number of rows
-    num_cols = Get number of columns
+    num_frames = ceiling(num_rows / frame_decimation)
+    num_features = Get number of columns
     
-    if num_cols = lpc_order
-        # Correct orientation
-        num_frames_full = num_rows
-        num_features = num_cols
-        lpcMatrixID = lpcMatrixTempID
-    else
-        # Transpose
-        Transpose
-        lpcMatrixID = selected("Matrix")
-        removeObject: lpcMatrixTempID
-        
-        num_frames_full = Get number of rows
-        num_features = Get number of columns
-    endif
+    Create simple Matrix: "TheFeatureData", num_frames, num_features, "0"
+    featureMatrixID = selected("Matrix")
     
-    # Decimate if needed
-    if frame_decimation > 1
-        num_frames = ceiling(num_frames_full / frame_decimation)
-        
-        Create simple Matrix: "features", num_frames, num_features, "0"
-        featureMatrixID = selected("Matrix")
-        
-        selectObject: lpcMatrixID
-        output_frame = 0
-        for frame to num_frames_full
-            if (frame - 1) mod frame_decimation = 0
-                output_frame = output_frame + 1
-                
-                for coef to num_features
-                    value = Get value in cell: frame, coef
-                    
-                    selectObject: featureMatrixID
-                    Set value: output_frame, coef, value
-                    
-                    selectObject: lpcMatrixID
-                endfor
-            endif
-        endfor
-        
-        removeObject: lpcMatrixID
-    else
-        num_frames = num_frames_full
-        featureMatrixID = lpcMatrixID
-    endif
-    
-    removeObject: lpcID
-    appendInfoLine: " done (", num_frames, " frames)"
-    
+    selectObject: transID
+    out_f = 0
+    for i to num_rows
+        if (i - 1) mod frame_decimation = 0
+            out_f = out_f + 1
+            for c to num_features
+                val = Get value in cell: i, c
+                selectObject: featureMatrixID
+                Set value: out_f, c, val
+                selectObject: transID
+            endfor
+        endif
+    endfor
+    removeObject: lpcID, matID, transID
+
 else
-    # ===============================================================
-    # MEL-LIKE FEATURES
-    # ===============================================================
-    appendInfo: "Extracting mel features..."
-    
-    current_sr = Get sampling frequency
-    nyquist = current_sr / 2
-    
-    freq_min = freq_min_mel
-    freq_max = freq_max_mel
-    
-    if freq_max > nyquist
-        freq_max = nyquist
-    endif
-    
-    To Spectrogram: window_length, nyquist, time_step, 20, "Gaussian"
-    spectrogramID = selected("Spectrogram")
+    # --- MEL FEATURES (Restored to Standard Method) ---
+    To Spectrogram: window_length, 8000, time_step, 20, "Gaussian"
+    specID = selected("Spectrogram")
     
     start_time = Get start time
     end_time = Get end time
     time_duration = end_time - start_time
+    total_time_frames = floor(time_duration / time_step)
     
-    # Create mel-spaced frequency bands
-    mel_min = 2595 * log10(1 + freq_min / 700)
-    mel_max = 2595 * log10(1 + freq_max / 700)
-    mel_step = (mel_max - mel_min) / num_mel_bands
-    
-    # Create center frequencies
-    for i to num_mel_bands
-        mel = mel_min + (i - 0.5) * mel_step
-        freq_center'i' = 700 * (10^(mel / 2595) - 1)
-    endfor
-    
-    total_time_frames = floor(time_duration / time_step) + 1
     num_frames = ceiling(total_time_frames / frame_decimation)
     num_features = num_mel_bands
     
-    Create simple Matrix: "features", num_frames, num_features, "0"
+    Create simple Matrix: "TheFeatureData", num_frames, num_features, "0"
     featureMatrixID = selected("Matrix")
     
-    selectObject: spectrogramID
+    # Pre-calc frequencies
+    m_min = 2595 * log10(1 + freq_min_mel/700)
+    m_max = 2595 * log10(1 + freq_max_mel/700)
+    m_step = (m_max - m_min) / num_mel_bands
+    for b to num_mel_bands
+        m = m_min + (b-0.5)*m_step
+        fc'b' = 700 * (10^(m/2595) - 1)
+    endfor
     
-    output_frame = 0
-    for t_idx to total_time_frames
-        if (t_idx - 1) mod frame_decimation = 0
-            output_frame = output_frame + 1
+    selectObject: specID
+    out_f = 0
+    for i to total_time_frames
+        if (i - 1) mod frame_decimation = 0
+            out_f = out_f + 1
             
-            time = start_time + (t_idx - 1) * time_step
+            # Robust time calculation
+            time = start_time + (i - 0.5) * time_step
             
-            # Get energy in each mel band
-            for band to num_mel_bands
-                freq = freq_center'band'
-                
-                power = Get power at: time, freq
-                
-                # Log compression (dB-like)
-                if power > 0
-                    log_power = 10 * log10(power) + 100
-                    
-                    if log_power < 0
-                        log_power = 0
+            for b to num_features
+                freq = fc'b'
+                p = Get power at: time, freq
+                if p > 0
+                    lp = 10 * log10(p) + 100
+                    if lp < 0
+                        lp = 0
                     endif
                 else
-                    log_power = 0
+                    lp = 0
                 endif
-                
                 selectObject: featureMatrixID
-                Set value: output_frame, band, log_power
-                
-                selectObject: spectrogramID
+                Set value: out_f, b, lp
+                selectObject: specID
             endfor
         endif
-        
-        if t_idx mod 50 = 0
-            appendInfo: "."
-        endif
     endfor
-    
-    removeObject: spectrogramID
-    appendInfoLine: " done (", num_frames, " frames)"
+    removeObject: specID
 endif
 
-appendInfoLine: "Features: ", num_frames, " frames × ", num_features, " dimensions"
-appendInfoLine: ""
-
 # ===================================================================
-# NORMALIZE FEATURES
+# NORMALIZE
 # ===================================================================
 
-appendInfo: "Normalizing..."
 selectObject: featureMatrixID
+appendInfo: "Normalizing..."
 
 if feature_type = 4
-    # Entropy: normalize to 0-1 range
-    min_val = Get minimum
-    max_val = Get maximum
-    
-    if max_val > min_val
-        Formula: "(self - min_val) / (max_val - min_val)"
+    # Min-Max Normalization for Entropy (1D)
+    min_v = Get minimum
+    max_v = Get maximum
+    if max_v > min_v
+        Formula: "(self - min_v) / (max_v - min_v)"
     endif
 else
-    # Pitch/MFCC/LPC/Mel: normalize to unit length
-    for i to num_frames
-        row_sum_sq = 0
-        for j to num_features
-            val = Get value in cell: i, j
-            row_sum_sq = row_sum_sq + (val * val)
+    # Unit Vector Normalization for others (Multidimensional)
+    for r to num_frames
+        sum_sq = 0
+        for c to num_features
+            val = Get value in cell: r, c
+            sum_sq = sum_sq + val^2
         endfor
-        
-        if row_sum_sq > 0
-            row_norm = sqrt(row_sum_sq)
-            for j to num_features
-                val = Get value in cell: i, j
-                Set value: i, j, val / row_norm
+        if sum_sq > 0
+            norm_factor = 1 / sqrt(sum_sq)
+            for c to num_features
+                val = Get value in cell: r, c
+                Set value: r, c, val * norm_factor
             endfor
-        endif
-        
-        if i mod 50 = 0
-            appendInfo: "."
         endif
     endfor
 endif
-
 appendInfoLine: " done"
 
 # ===================================================================
-# COMPUTE SSM
+# COMPUTE SSM (USING FORMULA ONLY)
 # ===================================================================
 
-appendInfo: "Computing SSM (", num_frames, "×", num_frames, ")..."
+appendInfo: "Computing SSM (", num_frames, "x", num_frames, ")..."
 
-Create simple Matrix: "SSM_temp", num_frames, num_frames, "0"
+Create simple Matrix: "SSM", num_frames, num_frames, "0"
 ssmID = selected("Matrix")
 
-for i to num_frames
-    for j to i
-        selectObject: featureMatrixID
-        
-        if feature_type = 4
-            # Entropy: use inverse of absolute difference
-            entropy_i = Get value in cell: i, 1
-            entropy_j = Get value in cell: j, 1
-            diff = abs(entropy_i - entropy_j)
-            similarity = 1 - diff
+if feature_type = 4 or feature_type = 1
+    # For 1D data: Use Absolute Difference
+    Formula: "1 - abs(Matrix_TheFeatureData[row, 1] - Matrix_TheFeatureData[col, 1])"
+    
+else
+    # For Multidimensional data: Use Dot Product (Cosine Sim) via Formula
+    formula_string$ = ""
+    for c to num_features
+        part$ = "Matrix_TheFeatureData[row, " + string$(c) + "] * Matrix_TheFeatureData[col, " + string$(c) + "]"
+        if c = 1
+            formula_string$ = part$
         else
-            # Pitch/MFCC/LPC/Mel: use cosine similarity (dot product)
-            dot_product = 0
-            for k to num_features
-                val_i = Get value in cell: i, k
-                val_j = Get value in cell: j, k
-                dot_product = dot_product + (val_i * val_j)
-            endfor
-            similarity = dot_product
+            formula_string$ = formula_string$ + " + " + part$
         endif
-        
-        selectObject: ssmID
-        Set value: i, j, similarity
-        Set value: j, i, similarity
     endfor
     
-    if i mod 20 = 0
-        appendInfo: "."
-    endif
-endfor
+    Formula: formula_string$
+endif
 
 appendInfoLine: " done"
 
 # ===================================================================
-# AUTO CONTRAST
+# POST-PROCESSING
 # ===================================================================
-
-selectObject: ssmID
-min_val = Get minimum
-max_val = Get maximum
-mean_val = Get mean: 0, 0, 0, 0
-
-appendInfoLine: ""
-appendInfoLine: "SSM stats: min=", fixed$(min_val, 3), " mean=", fixed$(mean_val, 3)
 
 if auto_contrast
+    mean_val = Get mean: 0, 0, 0, 0
     if mean_val > 0.95
-        contrast_enhancement = 20
+        pow = 20
     elsif mean_val > 0.90
-        contrast_enhancement = 10
+        pow = 10
     elsif mean_val > 0.80
-        contrast_enhancement = 5
+        pow = 5
     else
-        contrast_enhancement = 3
+        pow = 3
     endif
-else
-    contrast_enhancement = 3
+    Formula: "self ^ " + string$(pow)
+    
+    min = Get minimum
+    max = Get maximum
+    if max > min
+        Formula: "(self - min) / (max - min)"
+    endif
 endif
 
-appendInfoLine: "Contrast: ", fixed$(contrast_enhancement, 0), "x"
-
-Formula: "self^contrast_enhancement"
-new_min = Get minimum
-new_max = Get maximum
-Formula: "(self - new_min) / (new_max - new_min)"
-
-appendInfoLine: ""
-
 # ===================================================================
-# VISUALIZE
+# DRAW
 # ===================================================================
 
 if draw_matrix
-    appendInfo: "Drawing..."
-    
     Erase all
     Select outer viewport: 0, 6, 0, 6
-    
-    selectObject: ssmID
     Paint cells: 0, 0, 0, 0, 0, 1
-    
-    Colour: "Black"
     Draw inner box
-    
-    marks_interval = ceiling(num_frames / 10)
-    if marks_interval < 1
-        marks_interval = 1
-    endif
-    
-    Marks left every: 1, marks_interval, "yes", "yes", "no"
-    Marks bottom every: 1, marks_interval, "yes", "yes", "no"
-    
-    Text left: "yes", "Time (frame)"
-    Text bottom: "yes", "Time (frame)"
+    Marks left every: 1, floor(num_frames/10), "yes", "yes", "no"
+    Marks bottom every: 1, floor(num_frames/10), "yes", "yes", "no"
     Text top: "no", "SSM: " + originalName$ + " (" + feature_name$ + ")"
-    
-    appendInfoLine: " done"
 endif
 
-# ===================================================================
-# FINALIZE
-# ===================================================================
-
+# Cleanup
 selectObject: ssmID
 Rename: originalName$ + "_SSM_" + feature_name$
-
 removeObject: featureMatrixID
-
 if did_downsample
-    removeObject: downsampledID
+    removeObject: workingID
 endif
-
-# ===================================================================
-# REPORT
-# ===================================================================
-
-appendInfoLine: ""
-appendInfoLine: "=== COMPLETE ==="
-appendInfoLine: ""
-appendInfoLine: "FEATURE INTERPRETATION:"
-
-if feature_type = 1
-    appendInfoLine: "Pitch: Melodic/harmonic repetition"
-elsif feature_type = 2
-    appendInfoLine: "Pitch+Intensity: Melody + dynamics"
-elsif feature_type = 3
-    appendInfoLine: "MFCC: Spectral timbre similarity (best quality)"
-elsif feature_type = 4
-    appendInfoLine: "Spectral Entropy: Texture complexity"
-    appendInfoLine: "  High = noisy/complex, Low = tonal/simple"
-elsif feature_type = 5
-    appendInfoLine: "LPC: Vocal tract/formant structure"
-    appendInfoLine: "  Captures resonances and spectral envelope"
-else
-    appendInfoLine: "Mel Features: Perceptually-weighted spectrum"
-    appendInfoLine: "  Log-spaced frequencies matching human hearing"
-    appendInfoLine: "  Similar to MFCC but faster (no DCT)"
-endif
-
-appendInfoLine: ""
-appendInfoLine: "SSM PATTERNS:"
-appendInfoLine: "• Bright diagonal = self-similarity"
-appendInfoLine: "• Off-diagonal blocks = repeated sections"
-appendInfoLine: "• Parallel diagonals = periodic patterns"
-appendInfoLine: "• Checkerboard = alternating structure"
-appendInfoLine: ""
-appendInfoLine: "SPEED TIPS:"
-appendInfoLine: "• frame_decimation=2 → 2x faster"
-appendInfoLine: "• frame_decimation=5 → 5x faster"
-appendInfoLine: "• frame_decimation=10 → 10x faster"
-appendInfoLine: "• use_downsampling → 4x faster"
-appendInfoLine: "• Combine both for 20-40x speedup!"
-appendInfoLine: ""
-appendInfoLine: "Matrix: ", originalName$ + "_SSM_" + feature_name$
 
 selectObject: ssmID
