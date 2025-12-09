@@ -20,7 +20,7 @@
 # ============================================================
 
 # LZ-Inspired Audio Variations
-# Implements vectorization, sort-and-sweep, and matrix operations
+# Implements vectorization and sort-and-sweep algorithms
 
 form LZ Audio Variations (Optimized)
     comment === Segmentation Parameters ===
@@ -170,7 +170,7 @@ elsif analysis_type = 3
 endif
 
 # === OPTIMIZATION 1: VECTORIZATION ===
-# Load features into arrays for fast access
+# Load features into arrays for fast access (eliminates selectObject overhead)
 appendInfoLine: "Loading features into memory..."
 
 selectObject: features
@@ -198,9 +198,9 @@ for i to num_windows
 endfor
 
 # === OPTIMIZATION 2: SORT AND SWEEP ===
+# Sort by primary feature to enable early termination
 appendInfoLine: "Sorting features for efficient comparison..."
 
-# Sort by primary feature
 if analysis_type = 1
     selectObject: features
     Sort rows: "mean_f0"
@@ -229,31 +229,6 @@ for i to num_windows
     endif
 endfor
 
-# === OPTIMIZATION 3: MATRIX MATH (for Correlation metric) ===
-if distance_metric = 2
-    appendInfoLine: "Using matrix correlation calculation..."
-    
-    # Create matrix from features
-    selectObject: features
-    if analysis_type = 1
-        matrix = To Matrix (column): "mean_f0"
-    elsif analysis_type = 2
-        matrix = To Matrix (column): "spectral_cog"
-    else
-        matrix = To Matrix (column): "mean_intensity"
-    endif
-    
-    # Transpose for correlation matrix
-    transposed = Transpose
-    
-    # Calculate correlation matrix (this is FAST!)
-    selectObject: matrix
-    plusObject: transposed
-    correlation_matrix = Multiply
-    
-    removeObject: matrix, transposed
-endif
-
 # === STEP 2: Calculate distances and build dictionary ===
 appendInfoLine: ""
 appendInfoLine: "Building similarity dictionary..."
@@ -264,83 +239,80 @@ num_pairs = 0
 comparisons_made = 0
 comparisons_skipped = 0
 
+# Determine max acceptable difference for early break
+if analysis_type = 1
+    max_acceptable_diff = 600 * (1 - similarity_threshold)
+elsif analysis_type = 2
+    max_acceptable_diff = 5000 * (1 - similarity_threshold)
+else
+    max_acceptable_diff = 100 * (1 - similarity_threshold)
+endif
+
 for i to num_windows - 1
+    # Load from vectorized arrays (FAST!)
     f1_i = feature1# [i]
     f2_i = feature2# [i]
     idx_i = original_indices# [i]
     
-    # Inner loop with early break
-    for j from i + 1 to num_windows
-        f1_j = feature1# [j]
-        f2_j = feature2# [j]
-        idx_j = original_indices# [j]
-        
-        # === SORT AND SWEEP OPTIMIZATION ===
-        # Early break if primary feature difference exceeds threshold
-        primary_diff = abs(f1_j - f1_i)
-        
-        # Determine max acceptable difference based on analysis type
-        if analysis_type = 1
-            max_acceptable_diff = 600 * (1 - similarity_threshold)
-        elsif analysis_type = 2
-            max_acceptable_diff = 5000 * (1 - similarity_threshold)
-        else
-            max_acceptable_diff = 100 * (1 - similarity_threshold)
-        endif
-        
-        # Since sorted, if this difference is too large, all subsequent will be too
-        if primary_diff > max_acceptable_diff
-            comparisons_skipped += (num_windows - j + 1)
-            # Break out of inner loop - no more comparisons needed
-            j = num_windows + 1
-        else
-            comparisons_made += 1
+    # Only process if value is defined
+    if f1_i <> undefined
+        # Inner loop with early break
+        for j from i + 1 to num_windows
+            f1_j = feature1# [j]
+            f2_j = feature2# [j]
             
-            # Calculate distance using vectorized data
-            if f1_i <> undefined and f1_j <> undefined
-                if distance_metric = 1
-                    # Euclidean
-                    dist = sqrt((f1_i - f1_j)^2 + (f2_i - f2_j)^2)
-                    if analysis_type = 1
-                        max_dist = 600
-                    elsif analysis_type = 2
-                        max_dist = 5000
-                    else
-                        max_dist = 100
-                    endif
-                elsif distance_metric = 2
-                    # Correlation (use precomputed matrix if available)
-                    if variableExists("correlation_matrix")
-                        selectObject: correlation_matrix
-                        dist = 1 - Get value in cell: i, j
-                        max_dist = 1
-                    else
+            # Only process if value is defined
+            if f1_j <> undefined
+                idx_j = original_indices# [j]
+                
+                # === SORT AND SWEEP: Early termination ===
+                # Since sorted, if difference exceeds threshold, break
+                primary_diff = abs(f1_j - f1_i)
+                
+                if primary_diff > max_acceptable_diff
+                    comparisons_skipped += (num_windows - j + 1)
+                    j = num_windows + 1
+                else
+                    comparisons_made += 1
+                    
+                    # Calculate distance using vectorized data (no selectObject!)
+                    if distance_metric = 1
+                        # Euclidean
+                        dist = sqrt((f1_i - f1_j)^2 + (f2_i - f2_j)^2)
+                        if analysis_type = 1
+                            max_dist = 600
+                        elsif analysis_type = 2
+                            max_dist = 5000
+                        else
+                            max_dist = 100
+                        endif
+                        
+                    elsif distance_metric = 2
+                        # Correlation
                         dist = abs(f1_i - f1_j) / max(abs(f1_i), abs(f1_j))
                         max_dist = 1
+                        
+                    else
+                        # Cosine
+                        dist = 1 - (min(abs(f1_i), abs(f1_j)) / max(abs(f1_i), abs(f1_j)))
+                        max_dist = 1
                     endif
-                else
-                    # Cosine
-                    dist = 1 - (min(abs(f1_i), abs(f1_j)) / max(abs(f1_i), abs(f1_j)))
-                    max_dist = 1
+                    
+                    # Normalize and check similarity
+                    similarity = 1 - (dist / max_dist)
+                    
+                    if similarity >= similarity_threshold
+                        selectObject: dictionary
+                        Append row
+                        num_pairs += 1
+                        Set numeric value: num_pairs, "window_id", idx_i
+                        Set numeric value: num_pairs, "similar_to", idx_j
+                        Set numeric value: num_pairs, "distance", dist
+                    endif
                 endif
-            else
-                dist = 999
-                max_dist = 1
             endif
-            
-            # Normalize and check similarity
-            similarity = 1 - (dist / max_dist)
-            
-            if similarity >= similarity_threshold
-                selectObject: dictionary
-                Append row
-                num_pairs += 1
-                Set numeric value: num_pairs, "window_id", idx_i
-                Set numeric value: num_pairs, "similar_to", idx_j
-                Set numeric value: num_pairs, "distance", dist
-            endif
-        endif
-    endfor
+        endfor
+    endif
 endfor
 
 selectObject: dictionary
@@ -349,8 +321,10 @@ appendInfoLine: "Found ", num_patterns, " similar pattern pairs"
 appendInfoLine: "Comparisons made: ", comparisons_made
 appendInfoLine: "Comparisons skipped: ", comparisons_skipped
 total_possible = (num_windows * (num_windows - 1)) / 2
-speedup = total_possible / comparisons_made
-appendInfoLine: "Speedup factor: ", fixed$(speedup, 2), "x"
+if comparisons_made > 0
+    speedup = total_possible / comparisons_made
+    appendInfoLine: "Speedup factor: ", fixed$(speedup, 2), "x"
+endif
 
 # === STEP 3: Create variations ===
 appendInfoLine: ""
@@ -376,7 +350,7 @@ for out_i to num_output_windows
         window_idx = ((out_i - 1) mod num_windows) + 1
     endif
     
-    # Use vectorized lookup
+    # Use vectorized lookup (FAST!)
     start_time = start_times# [window_idx]
     end_time = end_times# [window_idx]
     
@@ -511,10 +485,6 @@ if analysis_type = 1
     removeObject: pitch
 elsif analysis_type = 3
     removeObject: intensity
-endif
-
-if variableExists("correlation_matrix")
-    removeObject: correlation_matrix
 endif
 
 removeObject: features, dictionary
