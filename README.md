@@ -8,7 +8,7 @@
 
 ## Overview
 
-**Praat AudioTools** is a collection of more than **250 scripts** for **audio processing, analysis, and synthesis** in [Praat](http://www.praat.org).  
+**Praat AudioTools** is a collection of more than **300 scripts** for **audio processing, analysis, and synthesis** in [Praat](http://www.praat.org).  
 The plugin adds a unified **AudioTools** menu to Praat, offering a wide range of effects, filters, transformations, and creative analysis-driven tools for sound design and experimental composition.
 
 Developed for composers, sound designers, and researchers, the toolkit extends Praat's phonetic analysis environment into a **complete offline sound laboratory** — enabling processes such as granular synthesis, adaptive filtering, spectral manipulation, fractal reverbs, multichannel spatialisation, and machine learning-driven audio effects.
