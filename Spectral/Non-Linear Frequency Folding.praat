@@ -171,6 +171,23 @@ if use_chunking and total_duration > chunk_duration
     
     # Concatenate chunks
     appendInfo: "✓ Concatenating chunks..."
+    
+    # Get the sampling rate from first chunk
+    selectObject: chunk1
+    target_sr = Get sampling frequency
+    
+    # Ensure all chunks have same sampling rate
+    for i to num_chunks
+        selectObject: chunk'i'
+        chunk_sr = Get sampling frequency
+        if chunk_sr <> target_sr
+            resampledChunkID = Resample: target_sr, 50
+            removeObject: chunk'i'
+            chunk'i' = resampledChunkID
+        endif
+    endfor
+    
+    # Now concatenate
     selectObject: chunk1
     for i from 2 to num_chunks
         plusObject: chunk'i'
