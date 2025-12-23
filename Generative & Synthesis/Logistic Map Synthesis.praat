@@ -19,7 +19,7 @@
 #   https://github.com/ShaiCohen-ops/Praat-plugin_AudioTools
 # ============================================================
 
-# Logistic Map Synthesis (Optimized & Cleaned)
+# Logistic Map Synthesis (Fixed & Cleaned)
 
 form Logistic Map Synthesis
     optionmenu Preset: 6
@@ -88,7 +88,7 @@ writeInfoLine: "Synthesizing Logistic Map..."
 # --- 1. THE MATH ENGINE (Control Signal) ---
 # Create a low-sample-rate Sound object to hold the data.
 control_rate = 200
-Create Sound from formula: "Control_Signal", 1, 0, duration, control_rate, "0"
+ctrl_id = Create Sound from formula: "Control_Signal", 1, 0, duration, control_rate, "0"
 
 # Vectorized Loop
 logistic_x = initial_x
@@ -115,7 +115,8 @@ if draw_logistic_map
     # Draw Parabola
     Colour: "Blue"
     Line width: 2
-    Create Sound from formula: "Parabola", 1, 0, 1, 1000, "r_parameter * x * (1-x)"
+    # We use a temp sound just to draw the curve easily
+    temp_curve = Create Sound from formula: "Parabola", 1, 0, 1, 1000, "r_parameter * x * (1-x)"
     Draw: 0, 1, 0, 1, "no", "Curve"
     Remove
     
@@ -125,7 +126,7 @@ if draw_logistic_map
     
     # Draw Cobweb
     if plot_type = 1 or plot_type = 3
-        selectObject: "Sound Control_Signal"
+        selectObject: ctrl_id
         curr_val = Get value at sample number: 1, 1
         
         Colour: "Red"
@@ -150,7 +151,7 @@ if draw_logistic_map
     
     # Draw Attractor Dots
     if plot_type = 2 or plot_type = 3
-        selectObject: "Sound Control_Signal"
+        selectObject: ctrl_id
         
         # Orange Color
         Colour: {1, 0.5, 0}
@@ -170,74 +171,83 @@ if draw_logistic_map
 endif
 
 # --- 3. AUDIO SYNTHESIS ---
-selectObject: "Sound Control_Signal"
-Copy: "Audio_Base"
-# Upsample to Audio Rate
-Resample: 44100, 50
+selectObject: ctrl_id
+# Create the base audio object by upsampling
+audio_id = Resample: 44100, 50
 Rename: "Logistic_Audio"
 
 # Apply Frequency Modulation Formula
+# Note: 'self' here is the logistic value (0 to 1)
+# It modulates both Amplitude (AM) and Frequency (FM)
 Formula: "0.3 * self * sin(2*pi * (base_frequency * (0.5 + self)) * x)"
 
 # --- 4. SPATIAL PROCESSING ---
+final_id = audio_id
+
 if spatial_mode = 2
-    # Stereo Wide
-    Copy: "Left"
-    Formula: "self * 0.8"
-    selectObject: "Sound Logistic_Audio"
-    Copy: "Right"
-    Formula: "self * 0.8"
+    # --- Stereo Wide ---
+    selectObject: audio_id
+    left_id = Copy: "Left"
+    selectObject: audio_id
+    right_id = Copy: "Right"
     
-    # Decorrelate channels with filters
-    selectObject: "Sound Left"
+    # Filter LEFT (Low Pass)
+    selectObject: left_id
     Filter (pass Hann band): 0, 2500, 100
-    selectObject: "Sound Right"
-    Filter (pass Hann band): 200, 5000, 100
+    left_band_id = selected("Sound")
+    # Clean up the unfiltered copy
+    removeObject: left_id
     
-    selectObject: "Sound Left"
-    plusObject: "Sound Right"
-    Combine to stereo
+    # Filter RIGHT (High Pass-ish)
+    selectObject: right_id
+    Filter (pass Hann band): 200, 5000, 100
+    right_band_id = selected("Sound")
+    # Clean up the unfiltered copy
+    removeObject: right_id
+    
+    # Combine the FILTERED versions
+    selectObject: left_band_id
+    plusObject: right_band_id
+    final_id = Combine to stereo
     Rename: "Logistic_Stereo"
     
-    selectObject: "Sound Left"
-    plusObject: "Sound Right"
-    Remove
+    # Cleanup intermediate filtered files
+    removeObject: left_band_id
+    removeObject: right_band_id
+    
+    # We also don't need the original mono audio anymore
+    removeObject: audio_id
     
 elsif spatial_mode = 3
-    # Random Pan
-    Copy: "Left"
-    selectObject: "Sound Logistic_Audio"
-    Copy: "Right"
+    # --- Random Pan ---
+    selectObject: audio_id
+    left_id = Copy: "Left"
+    selectObject: audio_id
+    right_id = Copy: "Right"
     
     # Pan based on the chaotic signal itself
-    selectObject: "Sound Left"
+    # We use a slow LFO for panning to avoid dizziness
+    selectObject: left_id
     Formula: "self * (0.5 + 0.5 * sin(2*pi*0.5*x))"
-    selectObject: "Sound Right"
+    selectObject: right_id
     Formula: "self * (0.5 + 0.5 * cos(2*pi*0.5*x))"
     
-    Combine to stereo
+    selectObject: left_id
+    plusObject: right_id
+    final_id = Combine to stereo
     Rename: "Logistic_Pan"
     
-    selectObject: "Sound Left"
-    plusObject: "Sound Right"
-    Remove
+    removeObject: left_id
+    removeObject: right_id
+    removeObject: audio_id
 endif
 
-# Cleanup
-selectObject: "Sound Control_Signal"
-Remove
-selectObject: "Sound Audio_Base"
+# Cleanup the control signal
+selectObject: ctrl_id
 Remove
 
-# Construct the output name based on mode
-output_name$ = "Logistic_Audio"
-if spatial_mode = 2
-    output_name$ = "Logistic_Stereo"
-elsif spatial_mode = 3
-    output_name$ = "Logistic_Pan"
-endif
-
-selectObject: "Sound " + output_name$
+# Select final output
+selectObject: final_id
 Scale peak: 0.9
 
 if play_after
