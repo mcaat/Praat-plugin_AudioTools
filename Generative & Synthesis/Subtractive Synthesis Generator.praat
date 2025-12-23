@@ -20,6 +20,10 @@
 # ============================================================
 
 form Subtractive Synthesis Generator
+    # --- New Option ---
+    boolean Bass_line_demo 0
+    comment (If checked, Frequency and Duration below are ignored)
+    # ------------------
     optionmenu Waveform: 1
         option Sawtooth
         option Square
@@ -57,125 +61,137 @@ endform
 
 sampling_frequency = 44100
 
-# Create harmonically rich source waveform
-if waveform = 1
-    # Sawtooth - rich in harmonics
-    sound = Create Sound from formula: "Sawtooth", 1, 0, duration, sampling_frequency,
-    ... "0.9 * (2*(frequency*x - floor(frequency*x + 0.5)))"
+# MAIN LOGIC
+if bass_line_demo
+    # Generate 4 notes for a bass pattern (A2, A2, A3, G2)
+    # We call the procedure '@makeSynth' for each note
     
-elsif waveform = 2
-    # Square - odd harmonics
-    sound = Create Sound from formula: "Square", 1, 0, duration, sampling_frequency,
-    ... "0.9 * if sin(2*pi*frequency*x) > 0 then 1 else -1 fi"
+    @makeSynth: 110, 0.25
+    id1 = selected("Sound")
     
-elsif waveform = 3
-    # Pulse - variable spectrum based on pulse width
-    sound = Create Sound from formula: "Pulse", 1, 0, duration, sampling_frequency,
-    ... "0.9 * if (frequency*x - floor(frequency*x)) < pulse_width then 1 else -1 fi"
+    @makeSynth: 110, 0.25
+    id2 = selected("Sound")
     
-elsif waveform = 4
-    # Triangle - fewer harmonics
-    sound = Create Sound from formula: "Triangle", 1, 0, duration, sampling_frequency,
-    ... "0.9 * (2/pi) * arcsin(sin(2*pi*frequency*x))"
+    @makeSynth: 220, 0.25
+    id3 = selected("Sound")
     
-elsif waveform = 5
-    # Dual Saw - thicker sound
-    detune = 7
-    sound = Create Sound from formula: "DualSaw", 1, 0, duration, sampling_frequency,
-    ... "0.6 * (2*(frequency*x - floor(frequency*x + 0.5)) + 2*((frequency+detune)*x - floor((frequency+detune)*x + 0.5)))"
-    
-elsif waveform = 6
-    # Super Saw - very rich harmonics
-    sound = Create Sound from formula: "SuperSaw", 1, 0, duration, sampling_frequency,
-    ... "0.4 * (2*(frequency*x - floor(frequency*x + 0.5)) + 2*((frequency*1.005)*x - floor((frequency*1.005)*x + 0.5)) + 2*((frequency*0.995)*x - floor((frequency*0.995)*x + 0.5)) + 2*((frequency*1.01)*x - floor((frequency*1.01)*x + 0.5)) + 2*((frequency*0.99)*x - floor((frequency*0.99)*x + 0.5)))"
-endif
+    @makeSynth: 196, 0.25
+    id4 = selected("Sound")
 
-selectObject: sound
-
-# Apply FILTER ENVELOPE first (modulates cutoff over time)
-if filter_envelope > 1
-    if filter_envelope = 2
-        # Short sweep - classic synth sound
-        Formula: "self * (0.3 + 0.7 * exp(-x*8))"
-        modulated_cutoff = cutoff_freq * (1 + envelope_amount * 2)
-        
-    elsif filter_envelope = 3
-        # Long sweep - evolving texture
-        Formula: "self * (0.5 + 0.5 * sin(2*pi*x*0.5))"
-        modulated_cutoff = cutoff_freq * (1 + envelope_amount * 1.5)
-        
-    elsif filter_envelope = 4
-        # Attack emphasis - bright attack, dark sustain
-        Formula: "self * exp(-x*15)"
-        modulated_cutoff = cutoff_freq * (1 + envelope_amount * 3)
-        
-    elsif filter_envelope = 5
-        # Decay sweep - filter opens during decay
-        Formula: "self * (1 - exp(-x*4))"
-        modulated_cutoff = cutoff_freq * (1 + envelope_amount * 2)
-    endif
+    # Combine them
+    selectObject: id1, id2, id3, id4
+    Concatenate
+    final_id = selected("Sound")
+    
+    # Cleanup individual notes
+    removeObject: id1, id2, id3, id4
+    
+    selectObject: final_id
 else
-    modulated_cutoff = cutoff_freq
+    # Standard single note generation
+    @makeSynth: frequency, duration
 endif
-
-# Apply MAIN FILTER (this is the subtractive part!)
-if filter_type = 2
-    # Low Pass 12dB - gentle rolloff
-    bandwidth = 100 + resonance * 200
-    Filter (pass Hann band): 0, modulated_cutoff, bandwidth
-    
-elsif filter_type = 3
-    # Low Pass 24dB - steeper rolloff (emulated)
-    bandwidth = 50 + resonance * 100
-    Filter (pass Hann band): 0, modulated_cutoff, bandwidth
-    # Second pass for steeper slope
-    Filter (pass Hann band): 0, modulated_cutoff, bandwidth * 1.2
-    
-elsif filter_type = 4
-    # High Pass - remove low frequencies
-    bandwidth = 100 + resonance * 200
-    Filter (stop Hann band): 0, modulated_cutoff, bandwidth
-    
-elsif filter_type = 5
-    # Band Pass - focus on specific frequency region
-    bandwidth = 50 + (1 - resonance) * 150
-    Filter (pass Hann band): modulated_cutoff - bandwidth/2, modulated_cutoff + bandwidth/2, bandwidth
-    
-elsif filter_type = 6
-    # Notch - remove specific frequency
-    bandwidth = 30 + resonance * 70
-    Filter (stop Hann band): modulated_cutoff - bandwidth/2, modulated_cutoff + bandwidth/2, bandwidth
-endif
-
-# Apply AMPLITUDE ENVELOPE (after filtering)
-selectObject: sound
-
-if amplitude_envelope = 1
-    # Percussive - quick decay
-    Formula: "self * exp(-x*8)"
-    
-elsif amplitude_envelope = 2
-    # Sustained - long decay
-    Formula: "self * exp(-x*1.5)"
-    
-elsif amplitude_envelope = 3
-    # Slow Attack - fade in
-    attack_time = 0.5
-    Formula: "self * if x < attack_time then x/attack_time else 1 fi"
-    
-elsif amplitude_envelope = 4
-    # Pluck - very quick decay
-    Formula: "self * exp(-x*20)"
-    
-elsif amplitude_envelope = 5
-    # Gate - constant until end
-    release_time = 0.1
-    Formula: "self * if x < (duration - release_time) then 1 else (duration - x)/release_time fi"
-endif
-
-# Final volume adjustment
-selectObject: sound
-Formula: "self * volume"
-Scale peak: 0.9
 
 Play
+
+# ---------------------------------------------------------
+# PROCEDURE: The Synthesizer Engine
+# ---------------------------------------------------------
+procedure makeSynth: .freq, .dur
+    # 1. GENERATE OSCILLATOR
+    if waveform = 1
+        .id = Create Sound from formula: "Sawtooth", 1, 0, .dur, sampling_frequency,
+        ... "0.9 * (2*(.freq*x - floor(.freq*x + 0.5)))"
+    elsif waveform = 2
+        .id = Create Sound from formula: "Square", 1, 0, .dur, sampling_frequency,
+        ... "0.9 * if sin(2*pi*.freq*x) > 0 then 1 else -1 fi"
+    elsif waveform = 3
+        .id = Create Sound from formula: "Pulse", 1, 0, .dur, sampling_frequency,
+        ... "0.9 * if (.freq*x - floor(.freq*x)) < pulse_width then 1 else -1 fi"
+    elsif waveform = 4
+        .id = Create Sound from formula: "Triangle", 1, 0, .dur, sampling_frequency,
+        ... "0.9 * (2/pi) * arcsin(sin(2*pi*.freq*x))"
+    elsif waveform = 5
+        .detune = 7
+        .id = Create Sound from formula: "DualSaw", 1, 0, .dur, sampling_frequency,
+        ... "0.6 * (2*(.freq*x - floor(.freq*x + 0.5)) + 2*((.freq+.detune)*x - floor((.freq+.detune)*x + 0.5)))"
+    elsif waveform = 6
+        .id = Create Sound from formula: "SuperSaw", 1, 0, .dur, sampling_frequency,
+        ... "0.4 * (2*(.freq*x - floor(.freq*x + 0.5)) + 2*((.freq*1.005)*x - floor((.freq*1.005)*x + 0.5)) + 2*((.freq*0.995)*x - floor((.freq*0.995)*x + 0.5)) + 2*((.freq*1.01)*x - floor((.freq*1.01)*x + 0.5)) + 2*((.freq*0.99)*x - floor((.freq*0.99)*x + 0.5)))"
+    endif
+
+    selectObject: .id
+
+    # 2. CALCULATE FILTER CUTOFF
+    .mod_cutoff = cutoff_freq
+
+    if filter_envelope > 1
+        if filter_envelope = 2
+            .mod_cutoff = cutoff_freq * (1 + envelope_amount * 2)
+        elsif filter_envelope = 3
+            .mod_cutoff = cutoff_freq * (1 + envelope_amount * 1.5)
+        elsif filter_envelope = 4
+            .mod_cutoff = cutoff_freq * (1 + envelope_amount * 3)
+        elsif filter_envelope = 5
+            .mod_cutoff = cutoff_freq * (1 + envelope_amount * 2)
+        endif
+    endif
+
+    # Nyquist safety
+    if .mod_cutoff > sampling_frequency / 2
+        .mod_cutoff = sampling_frequency / 2 - 100
+    endif
+
+    # 3. APPLY FILTER
+    if filter_type > 1
+        .source = .id
+        selectObject: .source
+
+        if filter_type = 2
+            .bw = 100 + resonance * 200
+            Filter (pass Hann band): 0, .mod_cutoff, .bw
+        elsif filter_type = 3
+            .bw = 50 + resonance * 100
+            .pass1 = Filter (pass Hann band): 0, .mod_cutoff, .bw
+            selectObject: .pass1
+            Filter (pass Hann band): 0, .mod_cutoff, .bw * 1.2
+            removeObject: .pass1
+        elsif filter_type = 4
+            .bw = 100 + resonance * 200
+            Filter (stop Hann band): 0, .mod_cutoff, .bw
+        elsif filter_type = 5
+            .bw = 50 + (1 - resonance) * 150
+            Filter (pass Hann band): .mod_cutoff - .bw/2, .mod_cutoff + .bw/2, .bw
+        elsif filter_type = 6
+            .bw = 30 + resonance * 70
+            Filter (stop Hann band): .mod_cutoff - .bw/2, .mod_cutoff + .bw/2, .bw
+        endif
+
+        .filtered = selected("Sound")
+        removeObject: .source
+        .id = .filtered
+    endif
+
+    # 4. APPLY AMPLITUDE ENVELOPE
+    selectObject: .id
+
+    if amplitude_envelope = 1
+        Formula: "self * exp(-x*8)"
+    elsif amplitude_envelope = 2
+        Formula: "self * exp(-x*1.5)"
+    elsif amplitude_envelope = 3
+        .atk = 0.5
+        Formula: "self * if x < .atk then x/.atk else 1 fi"
+    elsif amplitude_envelope = 4
+        Formula: "self * exp(-x*20)"
+    elsif amplitude_envelope = 5
+        .rel = 0.1
+        Formula: "self * if x < (.dur - .rel) then 1 else (.dur - x)/.rel fi"
+    endif
+
+    # 5. VOLUME
+    Formula: "self * volume"
+    Scale peak: 0.9
+    
+    # Leave the final sound selected for the main loop to pick up
+endproc
