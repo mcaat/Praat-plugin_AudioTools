@@ -3,16 +3,21 @@
 # Author: Shai Cohen
 # Affiliation: Department of Music, Bar-Ilan University, Israel
 # Email: shai.cohen@biu.ac.il
-# Version: 0.1 (2025)
+# Version: 2.0 (2025)
 # License: MIT License
 # Repository: https://github.com/ShaiCohen-ops/Praat-plugin_AudioTools
 #
 # Description:
-#   Sound synthesis or generative algorithm script
+#   Comprehensive formula-based synthesis system with multiple algorithms:
+#   - Simple Modulation
+#   - Competing Oscillators
+#   - Chaotic System
+#   - Harmonic Series
+#   - Fibonacci Ratios
+#   - Evolutionary Formula (complex evolving synthesis)
+#   Includes spatial processing and optional spectrogram visualization.
 #
-# Usage:
-#   Select a Sound object in Praat and run this script.
-#   Adjust parameters via the form dialog.
+# Merged from: Advanced_Formula_Synthesis.praat + Evolutionary_Formula.praat
 #
 # Citation:
 #   Cohen, S. (2025). Praat AudioTools: An Offline Analysis–Resynthesis Toolkit for Experimental Composition.
@@ -20,11 +25,12 @@
 # ============================================================
 
 form Advanced Formula Synthesis System
-    positive Duration_(sec) 10
-    positive Base_frequency_(Hz) 120
-    positive Number_of_layers 3
+    positive Duration_(sec) 8.0
+    positive Base_frequency_(Hz) 100
+    positive Number_of_layers 4
     real Modulation_depth 0.6
     real Complexity_factor 1.0
+    real Evolution_speed 1.0
     boolean Randomize_parameters 1
     positive Fade_time_(sec) 2
     optionmenu Synthesis_mode: 3
@@ -33,11 +39,13 @@ form Advanced Formula Synthesis System
         option Chaotic System
         option Harmonic Series
         option Fibonacci Ratios
+        option Evolutionary Formula
     optionmenu Spatial_mode: 1
         option Mono
         option Stereo Wide
         option Rotating
         option Binaural
+    boolean Create_visualization 1
     boolean Normalize_output 1
 endform
 
@@ -178,6 +186,51 @@ elsif synthesis_mode = 5
         call applyFadeEnvelope
         call addToOutput
     endfor
+
+elsif synthesis_mode = 6
+    # Evolutionary Formula (complex evolving synthesis)
+    echo Creating Evolutionary Formula...
+    
+    for layer from 1 to number_of_layers
+        if randomize_parameters
+            base_freq = base_frequency * (0.7 + 0.6 * randomUniform(0, 1))
+            evo_speed = evolution_speed * (0.5 + randomUniform(0, 1))
+        else
+            base_freq = base_frequency
+            evo_speed = evolution_speed
+        endif
+        
+        layer_amp = 0.8 / number_of_layers
+        
+        # Enhanced evolutionary formula with layered complexity
+        formula$ = "'layer_amp' * ("
+        formula$ = formula$ + "sin(2*pi*'base_freq'*x * "
+        formula$ = formula$ + "(1 + 'modulation_depth'*0.5*sin(2*pi*0.3*'evo_speed'*x) + "
+        formula$ = formula$ + "'modulation_depth'*0.3*sin(2*pi*2*'evo_speed'*x))) * "
+        formula$ = formula$ + "(0.7 + 0.3*sin(2*pi*0.1*'evo_speed'*x)) + "
+
+        formula$ = formula$ + "0.8*sin(2*pi*'base_freq'*1.333*x * "
+        formula$ = formula$ + "(1 + 'modulation_depth'*0.4*sin(2*pi*0.5*'evo_speed'*x + "
+        formula$ = formula$ + "0.7*sin(2*pi*1.2*'evo_speed'*x)))) * "
+        formula$ = formula$ + "(0.6 + 0.4*sin(2*pi*0.07*'evo_speed'*x)) + "
+
+        formula$ = formula$ + "0.6*sin(2*pi*'base_freq'*1.667*x * "
+        formula$ = formula$ + "(1 + 'modulation_depth'*0.6*sin(2*pi*0.8*'evo_speed'*x + "
+        formula$ = formula$ + "1.2*sin(2*pi*0.4*'evo_speed'*x)))) * "
+        formula$ = formula$ + "(0.5 + 0.5*sin(2*pi*0.12*'evo_speed'*x)) + "
+
+        formula$ = formula$ + "0.4*sin(2*pi*'base_freq'*2.0*x * "
+        formula$ = formula$ + "(1 + 'modulation_depth'*0.7*sin(2*pi*1.1*'evo_speed'*x + "
+        formula$ = formula$ + "1.5*sin(2*pi*0.6*'evo_speed'*x)))) * "
+        formula$ = formula$ + "(0.4 + 0.6*sin(2*pi*0.15*'evo_speed'*x))"
+
+        formula$ = formula$ + ") * (0.8 + 0.2*sin(2*pi*0.02*'evo_speed'*x)) * "
+        formula$ = formula$ + "(1 - 'complexity_factor'*0.3*x/'duration')"
+        
+        Create Sound from formula: "layer_'layer'", 1, 0, duration, sample_rate, formula$
+        call applyFadeEnvelope
+        call addToOutput
+    endfor
 endif
 
 # Select gen_output for spatial processing
@@ -278,9 +331,54 @@ endif
 
 call applyFinalFade
 
-Play
+# === VISUALIZATION SECTION ===
+if create_visualization
+    # Create analysis objects
+    select final_sound
+    To Spectrogram: 0.005, 5000, 0.002, 20, "Gaussian"
+    spectrogram = selected("Spectrogram")
+    
+    select final_sound
+    To Formant (burg): 0, 5, 5500, 0.025, 50
+    formant = selected("Formant")
+    
+    # Set up picture window
+    Erase all
+    Select inner viewport: 0.5, 7.5, 0.5, 4.5
+    Font size: 12
+    
+    # Draw spectrogram in black
+    select spectrogram
+    Paint: 0, 0, 0, 0, 100, "yes", 50, 6, 0, "no"
+    
+    # Draw formant tracks in red
+    select formant
+    Red
+    Speckle: 0, 0, 5500, 30, "yes"
+    
+    # Add labels
+    Black
+    Draw inner box
+    Text top: "yes", "Spectrum (black) with Formant Tracks (red)"
+    Text bottom: "yes", "Time (s)"
+    Marks bottom every: 1, 1, "yes", "yes", "no"
+    Text left: "yes", "Frequency (Hz)"
+    Marks left every: 1000, 1000, "yes", "yes", "no"
+    
+    # Clean up analysis objects
+    select spectrogram
+    plus formant
+    Remove
+    
+    echo Advanced Formula Synthesis complete!
+    echo Spectrum and formant visualization displayed.
+else
+    echo Advanced Formula Synthesis complete!
+endif
 
-echo Advanced Formula Synthesis complete!
+# Play the sound
+select final_sound
+Play
 
 procedure applyFadeEnvelope
     if fade_time > 0
