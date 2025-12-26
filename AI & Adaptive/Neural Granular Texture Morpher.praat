@@ -3,39 +3,143 @@
 # Author: Shai Cohen
 # Affiliation: Department of Music, Bar-Ilan University, Israel
 # Email: shai.cohen@biu.ac.il
-# Version: 0.2 (2025)
+# Version: 0.3 (2025) - Optimized + Stereo
 # License: MIT License
 # Repository: https://github.com/ShaiCohen-ops/Praat-plugin_AudioTools
 #
 # Description:
 #   Neural Granular Texture Morpher
-
+#   Optimizations:
+#   - Proper overlap-add synthesis
+#   - Smooth morphing between clusters
+#   - Multiple morph modes
+#   - Native arrays
+#   - Stereo output
+#   - Grain variation controls
+#
 # Citation:
 #   Cohen, S. (2025). Praat AudioTools: An Offline Analysis—Resynthesis Toolkit for Experimental Composition.
 #   https://github.com/ShaiCohen-ops/Praat-plugin_AudioTools
 # ============================================================
 
-# Neural Granular Texture Morpher 
-# - Fixed "Concatenate" error (Selection logic corrected).
-# - Uses manual K-Means (No external dependencies).
-# - Robust Table-based ID management.
-
 form Neural Texture Morpher
+    comment === Preset ===
+    optionmenu Preset 1
+        option Manual (Use Settings Below)
+        option Slow Evolution
+        option Rapid Texture
+        option Random Walk
+        option Rhythmic Cycle
+        option Ambient Drift
+        option Chaotic Morph
+    
     comment === Analysis Parameters ===
-    positive grain_size_ms 60
-    positive overlap_ratio 0.5
-    positive max_frequency_hz 8000
-    integer  number_of_clusters 4
+    positive Grain_size_ms 60
+    positive Overlap_ratio 0.5
+    integer Number_of_clusters 4
     
     comment === Synthesis Parameters ===
-    positive output_duration_sec 10.0
-    positive morph_speed_hz 0.5
+    positive Output_duration_sec 10.0
+    positive Morph_speed_hz 0.5
+    optionmenu Morph_mode 1
+        option Cycle (linear)
+        option Pendulum (back-forth)
+        option Random Walk
+        option Random Jump
+        option Weighted Random
+    
+    comment === Grain Variation ===
+    real Pitch_scatter_semitones 0.0
+    real Position_randomness 0.2
+    real Density_variation 0.1
     
     comment === Output ===
-    boolean  play_result 1
+    boolean Stereo_output 1
+    real Stereo_spread 0.5
+    boolean Play_result 1
 endform
 
-# ===== 1. SETUP =====
+# ============================================
+# PRESET LOGIC
+# ============================================
+
+if preset$ = "Slow Evolution"
+    grain_size_ms = 80
+    overlap_ratio = 0.6
+    number_of_clusters = 4
+    output_duration_sec = 15.0
+    morph_speed_hz = 0.15
+    morph_mode = 1
+    pitch_scatter_semitones = 0.0
+    position_randomness = 0.1
+    density_variation = 0.05
+    stereo_spread = 0.4
+
+elsif preset$ = "Rapid Texture"
+    grain_size_ms = 30
+    overlap_ratio = 0.4
+    number_of_clusters = 6
+    output_duration_sec = 8.0
+    morph_speed_hz = 2.0
+    morph_mode = 1
+    pitch_scatter_semitones = 0.5
+    position_randomness = 0.3
+    density_variation = 0.15
+    stereo_spread = 0.6
+
+elsif preset$ = "Random Walk"
+    grain_size_ms = 50
+    overlap_ratio = 0.5
+    number_of_clusters = 5
+    output_duration_sec = 12.0
+    morph_speed_hz = 0.8
+    morph_mode = 3
+    pitch_scatter_semitones = 0.3
+    position_randomness = 0.25
+    density_variation = 0.1
+    stereo_spread = 0.5
+
+elsif preset$ = "Rhythmic Cycle"
+    grain_size_ms = 40
+    overlap_ratio = 0.3
+    number_of_clusters = 4
+    output_duration_sec = 10.0
+    morph_speed_hz = 1.0
+    morph_mode = 2
+    pitch_scatter_semitones = 0.0
+    position_randomness = 0.05
+    density_variation = 0.0
+    stereo_spread = 0.3
+
+elsif preset$ = "Ambient Drift"
+    grain_size_ms = 100
+    overlap_ratio = 0.7
+    number_of_clusters = 3
+    output_duration_sec = 20.0
+    morph_speed_hz = 0.1
+    morph_mode = 3
+    pitch_scatter_semitones = 0.2
+    position_randomness = 0.15
+    density_variation = 0.08
+    stereo_spread = 0.7
+
+elsif preset$ = "Chaotic Morph"
+    grain_size_ms = 45
+    overlap_ratio = 0.5
+    number_of_clusters = 8
+    output_duration_sec = 10.0
+    morph_speed_hz = 1.5
+    morph_mode = 4
+    pitch_scatter_semitones = 1.0
+    position_randomness = 0.4
+    density_variation = 0.2
+    stereo_spread = 0.8
+endif
+
+# ============================================
+# SETUP
+# ============================================
+
 nSelected = numberOfSelected("Sound")
 if nSelected <> 1
     exitScript: "Please select exactly one Sound object."
@@ -46,183 +150,254 @@ sndName$ = selected$("Sound")
 
 selectObject: snd
 dur = Get total duration
-fs  = Get sampling frequency
-nch = Get number of channels
+fs = Get sampling frequency
 
-# Working Copy
-selectObject: snd
-Copy: "Analysis_Work"
-workSnd = selected("Sound")
-
-if nch > 1
-    selectObject: workSnd
-    Convert to mono
-    monoSnd = selected("Sound")
-    selectObject: workSnd
-    Remove
-    workSnd = monoSnd
-    selectObject: workSnd
-    Rename: "Analysis_Work"
+writeInfoLine: "=== NEURAL GRANULAR TEXTURE MORPHER ==="
+appendInfoLine: "Preset: ", preset$
+appendInfoLine: "Grain: ", grain_size_ms, " ms | Overlap: ", fixed$(overlap_ratio * 100, 0), "%"
+appendInfoLine: "Clusters: ", number_of_clusters, " | Morph: ", morph_speed_hz, " Hz"
+appendInfoLine: "Mode: ", morph_mode$
+if stereo_output
+    appendInfoLine: "Output: Stereo (spread: ", fixed$(stereo_spread * 100, 0), "%)"
+else
+    appendInfoLine: "Output: Mono"
 endif
+appendInfoLine: "========================================="
+appendInfoLine: ""
 
-# Check Duration
+# Work on mono copy
+selectObject: snd
+workSnd = Convert to mono
+Rename: "Analysis_Work"
+
 grainSec = grain_size_ms / 1000
 stepSec = grainSec * (1 - overlap_ratio)
+
 if dur < grainSec * 2
     removeObject: workSnd
     exitScript: "Sound is too short for granular analysis."
 endif
 
-# ===== 2. FEATURE EXTRACTION =====
-writeInfoLine: "Analyzing grains..."
+k = number_of_clusters
+
+# ============================================
+# FEATURE EXTRACTION (Native Arrays)
+# ============================================
+
+appendInfoLine: "Analyzing grains..."
 
 nGrains = floor((dur - grainSec) / stepSec)
-nFeatures = 5
+if nGrains < k
+    removeObject: workSnd
+    exitScript: "Not enough grains for ", k, " clusters. Reduce grain size or clusters."
+endif
 
-Create TableOfReal: "Features", nGrains, nFeatures
-featTable = selected("TableOfReal")
+# Feature arrays
+feat_centroid# = zero#(nGrains)
+feat_bandwidth# = zero#(nGrains)
+feat_pitch# = zero#(nGrains)
+feat_hnr# = zero#(nGrains)
+feat_intensity# = zero#(nGrains)
+grain_time# = zero#(nGrains)
 
-# Analysis Objects
+# Create analysis objects
 selectObject: workSnd
-To Spectrogram: grainSec, max_frequency_hz, stepSec, 20, "Gaussian"
-spec = selected("Spectrogram")
+spec = To Spectrogram: grainSec, 8000, stepSec, 20, "Gaussian"
 
 selectObject: workSnd
-To Pitch: stepSec, 75, 600
-pit = selected("Pitch")
+pit = To Pitch: stepSec, 75, 600
 
 selectObject: workSnd
-To Harmonicity (cc): stepSec, 75, 0.1, 1.0
-hnr = selected("Harmonicity")
+hnr_obj = To Harmonicity (cc): stepSec, 75, 0.1, 1.0
 
 selectObject: workSnd
-To Intensity: 75, stepSec, "yes"
-inten = selected("Intensity")
+inten = To Intensity: 75, stepSec, "yes"
 
-# Batch Extract
+# Extract features
 for i from 1 to nGrains
     t = (i - 0.5) * stepSec
+    grain_time#[i] = t
     
-    # 1. Spectral Centroid
+    # Spectral features
     selectObject: spec
-    To Spectrum (slice): t
-    slice = selected("Spectrum")
-    cent = Get centre of gravity: 2
-    band = Get standard deviation: 2
-    Remove
+    slice = To Spectrum (slice): t
+    selectObject: slice
+    feat_centroid#[i] = Get centre of gravity: 2
+    feat_bandwidth#[i] = Get standard deviation: 2
+    removeObject: slice
     
-    # 2. Pitch
+    # Pitch
     selectObject: pit
     f0 = Get value at time: t, "Hertz", "Linear"
-    if f0 = undefined
-        f0 = 0
+    if f0 = undefined or f0 <= 0
+        feat_pitch#[i] = 0
+    else
+        feat_pitch#[i] = f0
     endif
     
-    # 3. HNR
-    selectObject: hnr
+    # HNR
+    selectObject: hnr_obj
     h = Get value at time: t, "cubic"
     if h = undefined
-        h = -50
+        feat_hnr#[i] = -50
+    else
+        feat_hnr#[i] = h
     endif
     
-    # 4. Intensity
+    # Intensity
     selectObject: inten
-    in = Get value at time: t, "cubic"
-    if in = undefined
-        in = -100
+    iv = Get value at time: t, "cubic"
+    if iv = undefined
+        feat_intensity#[i] = 50
+    else
+        feat_intensity#[i] = iv
     endif
-    
-    # Store
-    selectObject: featTable
-    Set value: i, 1, cent
-    Set value: i, 2, band
-    Set value: i, 3, f0
-    Set value: i, 4, h
-    Set value: i, 5, in
 endfor
 
-removeObject: spec, pit, hnr, inten
+removeObject: spec, pit, hnr_obj, inten
 
-# ===== 3. MANUAL Z-SCORE NORMALIZATION =====
-selectObject: featTable
-nRows = Get number of rows
-nCols = Get number of columns
+appendInfoLine: "  ", nGrains, " grains analyzed"
 
-for c from 1 to nCols
-    # Mean
-    sum = 0
-    for r from 1 to nGrains
-        v = Get value: r, c
-        sum = sum + v
-    endfor
-    mean = sum / nGrains
-    
-    # Stdev
-    sumSq = 0
-    for r from 1 to nGrains
-        v = Get value: r, c
-        d = v - mean
-        sumSq = sumSq + d*d
-    endfor
-    sd = sqrt(sumSq / nGrains)
-    if sd = 0
-        sd = 1
-    endif
-    
-    # Apply
-    for r from 1 to nGrains
-        v = Get value: r, c
-        z = (v - mean) / sd
-        Set value: r, c, z
-    endfor
+# ============================================
+# NORMALIZE FEATURES (Z-Score)
+# ============================================
+
+# Centroid
+sum = 0
+for i to nGrains
+    sum += feat_centroid#[i]
+endfor
+mean_c = sum / nGrains
+sumSq = 0
+for i to nGrains
+    sumSq += (feat_centroid#[i] - mean_c)^2
+endfor
+std_c = sqrt(sumSq / nGrains)
+if std_c < 0.001
+    std_c = 1
+endif
+norm_centroid# = zero#(nGrains)
+for i to nGrains
+    norm_centroid#[i] = (feat_centroid#[i] - mean_c) / std_c
 endfor
 
-# ===== 4. MANUAL K-MEANS CLUSTERING =====
-writeInfoLine: "Learning textures (Training AI)..."
+# Bandwidth
+sum = 0
+for i to nGrains
+    sum += feat_bandwidth#[i]
+endfor
+mean_b = sum / nGrains
+sumSq = 0
+for i to nGrains
+    sumSq += (feat_bandwidth#[i] - mean_b)^2
+endfor
+std_b = sqrt(sumSq / nGrains)
+if std_b < 0.001
+    std_b = 1
+endif
+norm_bandwidth# = zero#(nGrains)
+for i to nGrains
+    norm_bandwidth#[i] = (feat_bandwidth#[i] - mean_b) / std_b
+endfor
 
-k = number_of_clusters
-max_iter = 10
+# Pitch
+sum = 0
+for i to nGrains
+    sum += feat_pitch#[i]
+endfor
+mean_p = sum / nGrains
+sumSq = 0
+for i to nGrains
+    sumSq += (feat_pitch#[i] - mean_p)^2
+endfor
+std_p = sqrt(sumSq / nGrains)
+if std_p < 0.001
+    std_p = 1
+endif
+norm_pitch# = zero#(nGrains)
+for i to nGrains
+    norm_pitch#[i] = (feat_pitch#[i] - mean_p) / std_p
+endfor
 
-# Initialize Centroids
-Create TableOfReal: "Centroids", k, nFeatures
-centroids = selected("TableOfReal")
+# HNR
+sum = 0
+for i to nGrains
+    sum += feat_hnr#[i]
+endfor
+mean_h = sum / nGrains
+sumSq = 0
+for i to nGrains
+    sumSq += (feat_hnr#[i] - mean_h)^2
+endfor
+std_h = sqrt(sumSq / nGrains)
+if std_h < 0.001
+    std_h = 1
+endif
+norm_hnr# = zero#(nGrains)
+for i to nGrains
+    norm_hnr#[i] = (feat_hnr#[i] - mean_h) / std_h
+endfor
 
+# Intensity
+sum = 0
+for i to nGrains
+    sum += feat_intensity#[i]
+endfor
+mean_i = sum / nGrains
+sumSq = 0
+for i to nGrains
+    sumSq += (feat_intensity#[i] - mean_i)^2
+endfor
+std_i = sqrt(sumSq / nGrains)
+if std_i < 0.001
+    std_i = 1
+endif
+norm_intensity# = zero#(nGrains)
+for i to nGrains
+    norm_intensity#[i] = (feat_intensity#[i] - mean_i) / std_i
+endfor
+
+# ============================================
+# K-MEANS CLUSTERING (Array-based)
+# ============================================
+
+appendInfoLine: "Clustering textures..."
+
+# Centroid arrays (5 features)
+cent_1# = zero#(k)
+cent_2# = zero#(k)
+cent_3# = zero#(k)
+cent_4# = zero#(k)
+cent_5# = zero#(k)
+
+# Initialize from random grains
 for c from 1 to k
-    randRow = randomInteger(1, nGrains)
-    for f from 1 to nFeatures
-        selectObject: featTable
-        val = Get value: randRow, f
-        selectObject: centroids
-        Set value: c, f, val
-    endfor
+    r = randomInteger(1, nGrains)
+    cent_1#[c] = norm_centroid#[r]
+    cent_2#[c] = norm_bandwidth#[r]
+    cent_3#[c] = norm_pitch#[r]
+    cent_4#[c] = norm_hnr#[r]
+    cent_5#[c] = norm_intensity#[r]
 endfor
 
-# Initialize Assignments
-Create TableOfReal: "Assignments", nGrains, 1
-assigns = selected("TableOfReal")
+# Assignments
+assigns# = zero#(nGrains)
 
-# Training Loop
+max_iter = 15
 for iter from 1 to max_iter
     changes = 0
     
-    # E-Step
+    # E-step: assign grains to nearest centroid
     for i from 1 to nGrains
         minDist = 1e9
         bestK = 1
         
-        for f from 1 to nFeatures
-            selectObject: featTable
-            feat_'f' = Get value: i, f
-        endfor
-        
         for c from 1 to k
-            distSq = 0
-            for f from 1 to nFeatures
-                selectObject: centroids
-                cVal = Get value: c, f
-                d = feat_'f' - cVal
-                distSq = distSq + d*d
-            endfor
+            distSq = (norm_centroid#[i] - cent_1#[c])^2 +
+                ... (norm_bandwidth#[i] - cent_2#[c])^2 +
+                ... (norm_pitch#[i] - cent_3#[c])^2 +
+                ... (norm_hnr#[i] - cent_4#[c])^2 +
+                ... (norm_intensity#[i] - cent_5#[c])^2
             
             if distSq < minDist
                 minDist = distSq
@@ -230,228 +405,368 @@ for iter from 1 to max_iter
             endif
         endfor
         
-        selectObject: assigns
-        oldK = Get value: i, 1
-        if oldK <> bestK
-            Set value: i, 1, bestK
-            changes = changes + 1
+        if assigns#[i] <> bestK
+            assigns#[i] = bestK
+            changes += 1
         endif
     endfor
     
-    # M-Step
+    # M-step: update centroids
     for c from 1 to k
+        sum_1 = 0
+        sum_2 = 0
+        sum_3 = 0
+        sum_4 = 0
+        sum_5 = 0
         count = 0
-        for f from 1 to nFeatures
-            sum_'f' = 0
-        endfor
         
         for i from 1 to nGrains
-            selectObject: assigns
-            myK = Get value: i, 1
-            if myK = c
-                count = count + 1
-                for f from 1 to nFeatures
-                    selectObject: featTable
-                    val = Get value: i, f
-                    sum_'f' = sum_'f' + val
-                endfor
+            if assigns#[i] = c
+                sum_1 += norm_centroid#[i]
+                sum_2 += norm_bandwidth#[i]
+                sum_3 += norm_pitch#[i]
+                sum_4 += norm_hnr#[i]
+                sum_5 += norm_intensity#[i]
+                count += 1
             endif
         endfor
         
         if count > 0
-            for f from 1 to nFeatures
-                avg = sum_'f' / count
-                selectObject: centroids
-                Set value: c, f, avg
-            endfor
+            cent_1#[c] = sum_1 / count
+            cent_2#[c] = sum_2 / count
+            cent_3#[c] = sum_3 / count
+            cent_4#[c] = sum_4 / count
+            cent_5#[c] = sum_5 / count
         endif
     endfor
     
     if changes = 0
-        goto converged
+        appendInfoLine: "  Converged at iteration ", iter
+        iter = max_iter + 1
     endif
 endfor
 
-label converged
+# ============================================
+# BUILD CLUSTER INDEX
+# ============================================
 
-# Build Cluster Lists
-for c from 1 to k
-    count_cluster_'c' = 0
+appendInfoLine: "  Building cluster index..."
+
+# Count grains per cluster
+cluster_count# = zero#(k)
+for i from 1 to nGrains
+    c = assigns#[i]
+    cluster_count#[c] += 1
 endfor
+
+# Build flat index with offsets
+cluster_offset# = zero#(k + 1)
+cluster_offset#[1] = 0
+for c from 2 to k + 1
+    cluster_offset#[c] = cluster_offset#[c-1] + cluster_count#[c-1]
+endfor
+
+cluster_index# = zero#(nGrains)
+cluster_fill# = zero#(k)
 
 for i from 1 to nGrains
-    selectObject: assigns
-    c = Get value: i, 1
-    
-    idx = count_cluster_'c' + 1
-    count_cluster_'c' = idx
-    cluster_'c'_grain_'idx' = i
+    c = assigns#[i]
+    pos = cluster_offset#[c] + cluster_fill#[c] + 1
+    cluster_index#[pos] = i
+    cluster_fill#[c] += 1
 endfor
-
-removeObject: featTable, centroids, assigns
 
 # Check for empty clusters
 valid_clusters = 0
 for c from 1 to k
-    if count_cluster_'c' > 0
-        valid_clusters = valid_clusters + 1
+    if cluster_count#[c] > 0
+        valid_clusters += 1
     endif
 endfor
 
 if valid_clusters < 2
     removeObject: workSnd
-    exitScript: "Analysis failed: Not enough distinct textures found."
+    exitScript: "Not enough distinct textures found. Try fewer clusters."
 endif
 
-# ===== 5. GENERATIVE SYNTHESIS =====
-writeInfoLine: "Synthesizing texture..."
+appendInfoLine: "  ", valid_clusters, " valid clusters"
+
+# ============================================
+# GENERATIVE SYNTHESIS (Overlap-Add)
+# ============================================
+
+appendInfoLine: "Synthesizing texture..."
 
 grains_needed = ceiling(output_duration_sec / stepSec)
-block_size = 50
+output_dur = output_duration_sec + grainSec  ; Extra for final grain
 
-# Output container
-Create TableOfReal: "BlockIDs", 10000, 1
-blockTable = selected("TableOfReal")
-block_count = 0
-
-total_generated = 0
-
-while total_generated < grains_needed
-    # Generate Block
-    Create TableOfReal: "GrainIDs", block_size, 1
-    grainTable = selected("TableOfReal")
-    grains_in_block = 0
-    
-    for b from 1 to block_size
-        total_generated = total_generated + 1
-        
-        # Morph Logic
-        t_gen = total_generated * stepSec
-        cycle_pos = (t_gen * morph_speed_hz) * k
-        target_c_float = (cycle_pos mod k) + 1
-        target_c = round(target_c_float)
-        
-        if target_c < 1
-            target_c = 1
-        endif
-        if target_c > k
-            target_c = k
-        endif
-        if count_cluster_'target_c' = 0
-            target_c = 1
-        endif
-        
-        max_g = count_cluster_'target_c'
-        r_idx = randomInteger(1, max_g)
-        grain_idx = cluster_'target_c'_grain_'r_idx'
-        
-        # Extract
-        t_grain = (grain_idx - 0.5) * stepSec
-        t_start = t_grain - (grainSec / 2)
-        t_end = t_grain + (grainSec / 2)
-        
-        selectObject: workSnd
-        Extract part: t_start, t_end, "Hanning", 1, "no"
-        gid = selected("Sound")
-        
-        grains_in_block = grains_in_block + 1
-        selectObject: grainTable
-        Set value: grains_in_block, 1, gid
-        
-        if total_generated >= grains_needed
-            goto finish_block
-        endif
-    endfor
-    
-    label finish_block
-    
-    # Concatenate Block (Safe Logic)
-    if grains_in_block > 0
-        # 1. Read IDs into variables first (Avoids selection conflict)
-        selectObject: grainTable
-        for g from 1 to grains_in_block
-            grain_id_'g' = Get value: g, 1
-        endfor
-        
-        # 2. Select IDs
-        selectObject: grain_id_1
-        for g from 2 to grains_in_block
-            plusObject: grain_id_'g'
-        endfor
-        
-        # 3. Concatenate or Copy
-        if grains_in_block > 1
-            Concatenate
-            blockMix = selected("Sound")
-        else
-            selectObject: grain_id_1
-            Copy: "Block"
-            blockMix = selected("Sound")
-        endif
-        
-        block_count = block_count + 1
-        selectObject: blockTable
-        Set value: block_count, 1, blockMix
-        
-        # Cleanup grains
-        for g from 1 to grains_in_block
-            selectObject: grain_id_'g'
-            Remove
-        endfor
-    endif
-    removeObject: grainTable
-    
-    if total_generated >= grains_needed
-        goto finalize
-    endif
-endwhile
-
-label finalize
-
-# ===== 6. FINAL CONCATENATION (Safe Logic) =====
-writeInfoLine: "Finalizing..."
-
-if block_count > 0
-    # 1. Read IDs into variables
-    selectObject: blockTable
-    for b from 1 to block_count
-        blk_id_'b' = Get value: b, 1
-    endfor
-    
-    # 2. Select IDs
-    selectObject: blk_id_1
-    for b from 2 to block_count
-        plusObject: blk_id_'b'
-    endfor
-    
-    # 3. Concatenate
-    if block_count > 1
-        Concatenate
-        finalOut = selected("Sound")
-    else
-        selectObject: blk_id_1
-        Copy: "Final"
-        finalOut = selected("Sound")
-    endif
-    
-    Rename: sndName$ + "_TextureMorph"
-    Scale peak: 0.99
-    
-    # Cleanup blocks
-    for b from 1 to block_count
-        selectObject: blk_id_'b'
-        Remove
-    endfor
+if stereo_output
+    n_passes = 2
 else
-    exitScript: "Generation failed."
+    n_passes = 1
 endif
 
-# ===== CLEANUP =====
-removeObject: workSnd, blockTable
+# Morph state for random walk
+current_cluster = 1
+walk_momentum = 0
 
-appendInfoLine: "Done! Created ", output_duration_sec, "s of morphing texture."
+for pass from 1 to n_passes
+    if stereo_output
+        if pass = 1
+            appendInfoLine: "  LEFT channel..."
+        else
+            appendInfoLine: "  RIGHT channel..."
+        endif
+    else
+        appendInfoLine: "  Generating..."
+    endif
+    
+    # Create output buffer
+    output_buf = Create Sound from formula: "Output_" + string$(pass), 1, 0, output_dur, fs, "0"
+    
+    # Reset morph state for each channel (slightly different for stereo)
+    if pass = 2
+        current_cluster = randomInteger(1, k)
+    else
+        current_cluster = 1
+    endif
+    
+    for g from 1 to grains_needed
+        # Current time
+        t_out = (g - 1) * stepSec
+        
+        # Apply density variation
+        if density_variation > 0
+            t_out = t_out + randomUniform(-1, 1) * density_variation * stepSec
+            if t_out < 0
+                t_out = 0
+            endif
+        endif
+        
+        # Determine target cluster based on morph mode
+        if morph_mode = 1
+            # Cycle (linear)
+            cycle_pos = t_out * morph_speed_hz
+            target_c = floor(cycle_pos mod k) + 1
+            
+        elsif morph_mode = 2
+            # Pendulum (back and forth)
+            cycle_pos = t_out * morph_speed_hz
+            ping_pong = cycle_pos mod (2 * (k - 1))
+            if ping_pong < k - 1
+                target_c = floor(ping_pong) + 1
+            else
+                target_c = k - floor(ping_pong - (k - 1)) - 1
+            endif
+            target_c = max(1, min(k, target_c))
+            
+        elsif morph_mode = 3
+            # Random walk
+            if randomUniform(0, 1) < morph_speed_hz * stepSec
+                walk_momentum += randomUniform(-1, 1)
+                walk_momentum = walk_momentum * 0.8  ; Damping
+                current_cluster += round(walk_momentum)
+                if current_cluster < 1
+                    current_cluster = 1
+                    walk_momentum = abs(walk_momentum)
+                elsif current_cluster > k
+                    current_cluster = k
+                    walk_momentum = -abs(walk_momentum)
+                endif
+            endif
+            target_c = current_cluster
+            
+        elsif morph_mode = 4
+            # Random jump
+            if randomUniform(0, 1) < morph_speed_hz * stepSec
+                target_c = randomInteger(1, k)
+                current_cluster = target_c
+            else
+                target_c = current_cluster
+            endif
+            
+        else
+            # Weighted random (favor current and neighbors)
+            if randomUniform(0, 1) < morph_speed_hz * stepSec * 0.5
+                offset = randomInteger(-1, 1)
+                target_c = current_cluster + offset
+                target_c = max(1, min(k, target_c))
+                current_cluster = target_c
+            else
+                target_c = current_cluster
+            endif
+        endif
+        
+        # Ensure valid cluster
+        if target_c < 1
+            target_c = 1
+        elsif target_c > k
+            target_c = k
+        endif
+        
+        # Handle empty cluster
+        if cluster_count#[target_c] = 0
+            # Find nearest non-empty cluster
+            for offset from 1 to k
+                if target_c + offset <= k and cluster_count#[target_c + offset] > 0
+                    target_c = target_c + offset
+                    offset = k + 1
+                elsif target_c - offset >= 1 and cluster_count#[target_c - offset] > 0
+                    target_c = target_c - offset
+                    offset = k + 1
+                endif
+            endfor
+        endif
+        
+        # Select grain from cluster
+        n_in_cluster = cluster_count#[target_c]
+        if n_in_cluster > 0
+            # Apply position randomness for stereo variation
+            if stereo_output and pass = 2 and stereo_spread > 0
+                r_idx = randomInteger(1, n_in_cluster)
+            else
+                r_idx = randomInteger(1, n_in_cluster)
+            endif
+            
+            idx_pos = cluster_offset#[target_c] + r_idx
+            grain_idx = cluster_index#[idx_pos]
+        else
+            grain_idx = 1
+        endif
+        
+        # Get grain time with position randomness
+        t_grain = grain_time#[grain_idx]
+        if position_randomness > 0
+            t_grain = t_grain + randomUniform(-1, 1) * position_randomness * grainSec
+            t_grain = max(grainSec/2, min(dur - grainSec/2, t_grain))
+        endif
+        
+        t_start = t_grain - grainSec/2
+        t_end = t_grain + grainSec/2
+        
+        # Clamp to valid range
+        if t_start < 0
+            t_start = 0
+            t_end = grainSec
+        endif
+        if t_end > dur
+            t_end = dur
+            t_start = dur - grainSec
+            if t_start < 0
+                t_start = 0
+            endif
+        endif
+        
+        # Extract grain with Hanning window
+        selectObject: workSnd
+        grain = Extract part: t_start, t_end, "Hanning", 1, "no"
+        
+        # Apply pitch scatter
+        if pitch_scatter_semitones > 0
+            selectObject: grain
+            scatter = randomUniform(-pitch_scatter_semitones, pitch_scatter_semitones)
+            ratio = 2 ^ (scatter / 12)
+            orig_fs = Get sampling frequency
+            new_fs = orig_fs * ratio
+            if new_fs > 8000 and new_fs < 96000
+                Resample: new_fs, 50
+                Override sampling frequency: orig_fs
+                grain_new = selected("Sound")
+                removeObject: grain
+                grain = grain_new
+            endif
+        endif
+        
+        # Add to output buffer (overlap-add)
+        selectObject: grain
+        grain_name$ = selected$("Sound")
+        grain_dur = Get total duration
+        
+        selectObject: output_buf
+        Formula (part): t_out, t_out + grain_dur, 1, 1,
+            ... "self + Sound_'grain_name$'(x - " + string$(t_out) + ")"
+        
+        removeObject: grain
+    endfor
+    
+    # Normalize for overlap-add gain
+    selectObject: output_buf
+    if overlap_ratio > 0.3
+        gain_comp = 1 / (1 + overlap_ratio * 0.8)
+        Formula: "self * " + string$(gain_comp)
+    endif
+    
+    # Store channel
+    if pass = 1
+        channel_left = output_buf
+    else
+        channel_right = output_buf
+    endif
+endfor
+
+# ============================================
+# COMBINE OUTPUT
+# ============================================
+
+if stereo_output
+    appendInfoLine: "Combining to stereo..."
+    
+    # Match durations
+    selectObject: channel_left
+    dur_L = Get total duration
+    selectObject: channel_right
+    dur_R = Get total duration
+    
+    min_dur = min(dur_L, dur_R)
+    
+    if dur_L > min_dur
+        selectObject: channel_left
+        tmp = Extract part: 0, min_dur, "rectangular", 1, "no"
+        removeObject: channel_left
+        channel_left = tmp
+    endif
+    if dur_R > min_dur
+        selectObject: channel_right
+        tmp = Extract part: 0, min_dur, "rectangular", 1, "no"
+        removeObject: channel_right
+        channel_right = tmp
+    endif
+    
+    selectObject: channel_left, channel_right
+    finalOut = Combine to stereo
+    Rename: sndName$ + "_TextureMorph_stereo"
+    
+    removeObject: channel_left, channel_right
+else
+    finalOut = channel_left
+    Rename: sndName$ + "_TextureMorph"
+endif
+
+selectObject: finalOut
+Scale peak: 0.99
+
+# ============================================
+# CLEANUP
+# ============================================
+
+removeObject: workSnd
+
+selectObject: snd
+plusObject: finalOut
+
+appendInfoLine: ""
+appendInfoLine: "=== COMPLETE ==="
+selectObject: finalOut
+n_ch = Get number of channels
+out_dur = Get total duration
+appendInfoLine: "Output: ", selected$("Sound")
+appendInfoLine: "Duration: ", fixed$(out_dur, 2), " s"
+appendInfoLine: "Channels: ", n_ch
 
 if play_result
+    appendInfoLine: "Playing..."
     selectObject: finalOut
     Play
 endif
+
+selectObject: finalOut
