@@ -1,44 +1,110 @@
 # ============================================================
-# Praat AudioTools - Neural Delay Control (FFNet with adaptive feedback)
+# Praat AudioTools - Neural Delay Control
 # Author: Shai Cohen
 # Affiliation: Department of Music, Bar-Ilan University, Israel
 # Email: shai.cohen@biu.ac.il
-# Version: 0.2 (2025)
+# Version: 0.4 (2025) - Fast Mono
 # License: MIT License
 # Repository: https://github.com/ShaiCohen-ops/Praat-plugin_AudioTools
 #
 # Description:
-#   Neural Delay Control (FFNet with adaptive feedback)
-
+#   Neural Delay Control - Fast block-based processing
+#   Uses adaptive mix/feedback based on audio features
+#
 # Citation:
 #   Cohen, S. (2025). Praat AudioTools: An Offline Analysis—Resynthesis Toolkit for Experimental Composition.
 #   https://github.com/ShaiCohen-ops/Praat-plugin_AudioTools
 # ============================================================
 
-# Neural Delay Control (FFNet with adaptive feedback) 
-# - Fixed "No sound selected" error by using strict ID tracking.
-# - Preserves original sound.
-# - Validates selection at every step.
-
 form Neural Delay Control
-    positive frame_step_seconds 0.02
-    positive smooth_ms 40
-    positive max_formant_hz 5500
-    integer hidden_units 24
-    integer training_epochs 60
-    positive learn_tolerance 1e-6
-    positive delay_time_ms 250
-    positive feedback_base 0.4
-    positive mix_base 0.3
-    positive transient_suppression 0.25
-    positive hnr_gain 0.3
-    positive f0_bonus 0.15
-    boolean play_result 1
+    comment === Preset ===
+    optionmenu Preset 1
+        option Manual (Use Settings Below)
+        option Clean Digital
+        option Analog Warmth
+        option Slapback
+        option Rhythmic Dotted
+        option Ambient Wash
+        option Modulated
+    
+    comment === Delay Parameters ===
+    positive Delay_time_ms 250
+    positive Feedback_base 0.4
+    positive Mix_base 0.3
+    integer Number_of_repeats 4
+    
+    comment === Feedback Filter ===
+    boolean Enable_filter 1
+    positive Filter_cutoff_hz 4000
+    
+    comment === Neural Control ===
+    positive Frame_step_ms 20
+    positive Smooth_ms 40
+    
+    comment === Adaptive Sensitivity ===
+    positive Transient_suppression 0.25
+    positive HNR_gain 0.3
+    positive Pitch_bonus 0.15
+    
+    comment === Output ===
+    boolean Play_result 1
 endform
 
-# --- 1. Setup and Preprocessing ---
+# ============================================
+# PRESET LOGIC
+# ============================================
 
-# Check number of selected sounds
+if preset$ = "Clean Digital"
+    delay_time_ms = 250
+    feedback_base = 0.35
+    mix_base = 0.3
+    number_of_repeats = 4
+    enable_filter = 0
+
+elsif preset$ = "Analog Warmth"
+    delay_time_ms = 300
+    feedback_base = 0.5
+    mix_base = 0.35
+    number_of_repeats = 5
+    enable_filter = 1
+    filter_cutoff_hz = 3000
+
+elsif preset$ = "Slapback"
+    delay_time_ms = 80
+    feedback_base = 0.15
+    mix_base = 0.45
+    number_of_repeats = 2
+    enable_filter = 0
+
+elsif preset$ = "Rhythmic Dotted"
+    delay_time_ms = 375
+    feedback_base = 0.45
+    mix_base = 0.35
+    number_of_repeats = 4
+    enable_filter = 1
+    filter_cutoff_hz = 4500
+
+elsif preset$ = "Ambient Wash"
+    delay_time_ms = 500
+    feedback_base = 0.6
+    mix_base = 0.4
+    number_of_repeats = 6
+    enable_filter = 1
+    filter_cutoff_hz = 2500
+
+elsif preset$ = "Modulated"
+    delay_time_ms = 200
+    feedback_base = 0.45
+    mix_base = 0.35
+    number_of_repeats = 4
+    enable_filter = 1
+    filter_cutoff_hz = 5000
+endif
+
+# ============================================
+# SETUP
+# ============================================
+
 nSelected = numberOfSelected("Sound")
 if nSelected <> 1
     exitScript: "Please select exactly one Sound object."
@@ -50,500 +116,235 @@ original_name$ = selected$("Sound")
 selectObject: original_sound
 duration = Get total duration
 fs = Get sampling frequency
-nChannels = Get number of channels
 
-if duration < frame_step_seconds
-    exitScript: "Sound too short for given frame step."
+writeInfoLine: "=== NEURAL DELAY CONTROL (Fast) ==="
+appendInfoLine: "Preset: ", preset$
+appendInfoLine: "Delay: ", delay_time_ms, " ms | Feedback: ", fixed$(feedback_base, 2)
+appendInfoLine: "Mix: ", fixed$(mix_base, 2), " | Repeats: ", number_of_repeats
+if enable_filter
+    appendInfoLine: "Filter: LP @ ", filter_cutoff_hz, " Hz"
 endif
+appendInfoLine: "===================================="
+appendInfoLine: ""
 
-# WORK ON A COPY (Preserve Original)
+# Work on mono copy
 selectObject: original_sound
-Copy: "Analysis_Copy"
-sound_work = selected("Sound")
+sound_work = Convert to mono
+Rename: "Work"
 
-# Ensure Mono for analysis (ID-Safe Method)
-if nChannels > 1
-    selectObject: sound_work
-    # Convert to mono creates a new object and selects it
-    Convert to mono
-    sound_mono_id = selected("Sound")
-    
-    # Remove the stereo copy
-    selectObject: sound_work
-    Remove
-    
-    # Update our working ID to the new mono sound
-    sound_work = sound_mono_id
-    selectObject: sound_work
-    Rename: "Analysis_Copy"
+delay_sec = delay_time_ms / 1000
+frame_step_sec = frame_step_ms / 1000
+
+# ============================================
+# FEATURE EXTRACTION (Fast)
+# ============================================
+
+appendInfoLine: "Extracting features..."
+
+nFrames = floor(duration / frame_step_sec)
+if nFrames < 1
+    nFrames = 1
 endif
 
-# Verify we still have a sound
-if not sound_work
-    exitScript: "Error: Lost track of the sound object during setup."
-endif
+# Arrays for features and control
+feat_intensity# = zero#(nFrames)
+feat_hnr# = zero#(nFrames)
+feat_pitch# = zero#(nFrames)
+ctrl_mix# = zero#(nFrames)
+ctrl_fb# = zero#(nFrames)
 
-# --- 2. Feature Extraction ---
-
+# Extract intensity
 selectObject: sound_work
-To Pitch: 0, 75, 600
-pitch = selected("Pitch")
+intensity_obj = To Intensity: 75, frame_step_sec, "yes"
 
+# Extract HNR
 selectObject: sound_work
-To Intensity: 75, 0, "yes"
-intensity = selected("Intensity")
+hnr_obj = To Harmonicity (cc): frame_step_sec, 75, 0.1, 1.0
 
+# Extract pitch
 selectObject: sound_work
-To Formant (burg): 0, 5, max_formant_hz, 0.025, 50
-formant = selected("Formant")
+pitch_obj = To Pitch: frame_step_sec, 75, 600
 
-selectObject: sound_work
-To MFCC: 12, 0.025, frame_step_seconds, 100, 100, 0
-mfcc = selected("MFCC")
-
-selectObject: sound_work
-To Harmonicity (cc): frame_step_seconds, 75, 0.1, 1.0
-harmonicity = selected("Harmonicity")
-
-# Get Frame Counts
-selectObject: mfcc
-nFrames_mfcc = Get number of frames
-selectObject: intensity
-nFrames_int = Get number of frames
-selectObject: harmonicity
-nFrames_hnr = Get number of frames
-selectObject: pitch
-nFrames_f0 = Get number of frames
-
-rows_target = round(duration / frame_step_seconds)
-if rows_target < 1
-    rows_target = 1
-endif
-n_features = 18
-
-Create TableOfReal: "features", rows_target, n_features
-xtab = selected("TableOfReal")
-Create TableOfReal: "targets", rows_target, 2
-ytab = selected("TableOfReal")
-
-# --- 3. Dataset Generation (Heuristics) ---
-
-selectObject: xtab
-eps = frame_step_seconds * 0.25
-prev_int = undefined
-
-for i from 1 to rows_target
-    t_raw = frame_step_seconds * (i - 0.5)
-    t = t_raw
-    if t < 0
-        t = 0
-    elsif t > duration - eps
-        t = duration - eps
-    endif
-
-    # -- Safe Indexing --
-    iM = i
-    if iM > nFrames_mfcc
-        iM = nFrames_mfcc
-    endif
-
-    # -- MFCC Extraction --
-    for c from 1 to 12
-        selectObject: mfcc
-        v = Get value in frame: iM, c
-        if v = undefined
-            v = 0
-        endif
-        selectObject: xtab
-        if c <= 3
-            Set value: i, c, v
-        else
-            Set value: i, 9 + c - 3, v
-        endif
-    endfor
-
-    # -- Formant Extraction --
-    selectObject: formant
-    f1 = Get value at time: 1, t, "Hertz", "Linear"
-    f2 = Get value at time: 2, t, "Hertz", "Linear"
-    f3 = Get value at time: 3, t, "Hertz", "Linear"
-    if f1 = undefined
-        f1 = 500
-    endif
-    if f2 = undefined
-        f2 = 1500
-    endif
-    if f3 = undefined
-        f3 = 2500
-    endif
+for i from 1 to nFrames
+    t = (i - 0.5) * frame_step_sec
     
-    selectObject: xtab
-    Set value: i, 4, f1 / 1000
-    Set value: i, 5, f2 / 1000
-    Set value: i, 6, f3 / 1000
-
-    # -- Intensity Extraction --
-    selectObject: intensity
+    selectObject: intensity_obj
     iv = Get value at time: t, "cubic"
     if iv = undefined
         iv = 60
     endif
-    selectObject: xtab
-    Set value: i, 7, (iv - 60) / 20
-
-    # -- Harmonicity Extraction --
-    selectObject: harmonicity
+    feat_intensity#[i] = iv
+    
+    selectObject: hnr_obj
     hnr = Get value at time: t, "cubic"
     if hnr = undefined
         hnr = 0
     endif
-    selectObject: xtab
-    Set value: i, 8, hnr / 20
-
-    # -- Pitch Extraction --
-    selectObject: pitch
+    feat_hnr#[i] = max(0, min(1, (hnr + 10) / 40))
+    
+    selectObject: pitch_obj
     f0 = Get value at time: t, "Hertz", "Linear"
     if f0 = undefined or f0 <= 0
-        z = 0.0
+        feat_pitch#[i] = 0
     else
-        z = f0 / 500
-        if z > 1
-            z = 1
-        endif
+        feat_pitch#[i] = 1
     endif
-    selectObject: xtab
-    Set value: i, 9, z
-
-    # -- Target Calculation (Heuristics) --
-    if prev_int = undefined
-        dI = 0
-    else
-        dI = iv - prev_int
-        if dI < 0
-            dI = -dI
-        endif
-    endif
-    prev_int = iv
-
-    hnr_n = hnr / 20
-    if hnr_n < 0
-        hnr_n = 0
-    elsif hnr_n > 1
-        hnr_n = 1
-    endif
-
-    f0v = 0
-    if f0 > 0
-        f0v = 1
-    endif
-
-    trans = dI / 30
-    if trans > 1
-        trans = 1
-    elsif trans < 0
-        trans = 0
-    endif
-
-    # Target Logic
-    mix0 = mix_base + hnr_gain * hnr_n + f0_bonus * f0v - transient_suppression * trans
-    if mix0 < 0.05
-        mix0 = 0.05
-    elsif mix0 > 0.8
-        mix0 = 0.8
-    endif
-
-    fb0 = feedback_base + 0.3 * hnr_n - 0.25 * trans
-    if fb0 < 0.1
-        fb0 = 0.1
-    elsif fb0 > 0.7
-        fb0 = 0.7
-    endif
-
-    selectObject: ytab
-    Set value: i, 1, mix0
-    Set value: i, 2, fb0
 endfor
 
-# --- 4. Normalization ---
+removeObject: intensity_obj, hnr_obj, pitch_obj
 
-selectObject: xtab
-cols = Get number of columns
-for j from 1 to cols
-    cmin = 1e30
-    cmax = -1e30
-    for i from 1 to rows_target
-        v = Get value: i, j
-        if v = undefined
-            v = 0
-        endif
-        if v < cmin
-            cmin = v
-        endif
-        if v > cmax
-            cmax = v
-        endif
-    endfor
-    rng = cmax - cmin
-    if rng = 0
-        rng = 1
-    endif
-    for i from 1 to rows_target
-        v = Get value: i, j
-        if v = undefined
-            v = 0
-        endif
-        nv = (v - cmin) / rng
-        Set value: i, j, nv
-    endfor
+# ============================================
+# COMPUTE ADAPTIVE CONTROL
+# ============================================
+
+appendInfoLine: "Computing adaptive control..."
+
+prev_int = feat_intensity#[1]
+
+for i from 1 to nFrames
+    # Transient detection
+    dI = abs(feat_intensity#[i] - prev_int) / 20
+    prev_int = feat_intensity#[i]
+    trans = min(dI, 1)
+    
+    # Mix: higher for tonal, lower for transients
+    mix0 = mix_base + hNR_gain * feat_hnr#[i] + pitch_bonus * feat_pitch#[i] - transient_suppression * trans
+    ctrl_mix#[i] = max(0.05, min(0.8, mix0))
+    
+    # Feedback: higher for sustained, lower for transients
+    fb0 = feedback_base + 0.2 * feat_hnr#[i] - 0.3 * trans
+    ctrl_fb#[i] = max(0.1, min(0.7, fb0))
 endfor
 
-# --- 5. Neural Network Training ---
-
-selectObject: ytab
-To Matrix
-ymat = selected("Matrix")
-selectObject: ymat
-To ActivationList
-yal = selected("ActivationList")
-
-selectObject: xtab
-To Matrix
-xmat = selected("Matrix")
-selectObject: xmat
-To Pattern: 1
-pat = selected("Pattern")
-
-nin = n_features
-nout = 2
-Create FFNet (linear outputs): "ffnet", nin, nout, hidden_units, 0
-ff = selected("FFNet")
-
-epoch = 0
-last_cost = 1e30
-
-while epoch < training_epochs
-    epoch = epoch + 1
-    selectObject: ff
-    plusObject: pat
-    plusObject: yal
-    Learn: 1, learn_tolerance, "Minimum-squared-error"
-    
-    selectObject: ff
-    plusObject: pat
-    plusObject: yal
-    cost = Get total costs: "Minimum-squared-error"
-    
-    diff = abs(cost - last_cost)
-    if diff < learn_tolerance
-        break
-    endif
-    last_cost = cost
-endwhile
-
-# Predict
-selectObject: ff
-plusObject: pat
-To ActivationList: 1
-afinal = selected("ActivationList")
-selectObject: afinal
-To Matrix
-ypred = selected("Matrix")
-
-# Clamp output
-selectObject: ypred
-Formula: "if self < 0 then 0 else if self > 1 then 1 else self fi fi"
-
-# --- 6. Smoothing & Control Signal Generation ---
-
-win = round(smooth_ms / (1000 * frame_step_seconds))
+# Smooth control signals
+win = round(smooth_ms / frame_step_ms)
 if win < 1
     win = 1
 endif
 
-Create TableOfReal: "Ctrl", rows_target, 2
-ctrl = selected("TableOfReal")
+ctrl_mix_smooth# = zero#(nFrames)
+ctrl_fb_smooth# = zero#(nFrames)
 
-# Simple moving average
-for i from 1 to rows_target
-    i1 = i - win
-    if i1 < 1
-        i1 = 1
-    endif
-    i2 = i + win
-    if i2 > rows_target
-        i2 = rows_target
-    endif
+for i from 1 to nFrames
+    i1 = max(1, i - win)
+    i2 = min(nFrames, i + win)
     
-    # Calculate means
-    s1 = 0
-    s2 = 0
-    n = 0
+    sum_m = 0
+    sum_f = 0
+    n = i2 - i1 + 1
+    
     for k from i1 to i2
-        selectObject: ypred
-        m_val = Get value in cell: k, 1
-        f_val = Get value in cell: k, 2
-        s1 = s1 + m_val
-        s2 = s2 + f_val
-        n = n + 1
+        sum_m += ctrl_mix#[k]
+        sum_f += ctrl_fb#[k]
     endfor
     
-    selectObject: ctrl
-    Set value: i, 1, s1 / n
-    Set value: i, 2, s2 / n
+    ctrl_mix_smooth#[i] = sum_m / n
+    ctrl_fb_smooth#[i] = sum_f / n
 endfor
 
-# --- 7. Fast Signal Processing (Block Processing Method) ---
+# ============================================
+# BUILD DELAY LAYERS (Block-based - FAST)
+# ============================================
 
-# A. Convert Control to Sound (2 Channels: Mix, FB)
-selectObject: ctrl
-To Matrix
-ctrlMat = selected("Matrix")
-selectObject: ctrlMat
-Transpose
-ctrlMatT = selected("Matrix")
-selectObject: ctrlMatT
-To Sound
-Rename: "Control_LowRes"
-Override sampling frequency: 1 / frame_step_seconds
-Resample: fs, 50
-Rename: "Control_Signals"
-controlSound = selected("Sound")
+appendInfoLine: "Building delay layers..."
 
-# B. Prepare Blocks
+# Create output starting with dry signal
 selectObject: sound_work
-dur = Get total duration
-delay_sec = delay_time_ms / 1000
-n_blocks = ceiling(dur / delay_sec)
+output = Copy: "Output"
 
-# Create a Table to store the IDs of the processed blocks
-Create TableOfReal: "BlockIDs", n_blocks, 1
-idsTable = selected("TableOfReal")
+# Extend output for delay tail
+tail_duration = delay_sec * number_of_repeats
+selectObject: output
+output_dur = Get total duration
 
-# Create a blank sound for the "Previous Block" (Initial state = Silence)
-Create Sound from formula: "Prev_Block", 1, 0, delay_sec, fs, "0"
-prev_block_id = selected("Sound")
+silence_tail = Create Sound from formula: "tail", 1, 0, tail_duration, fs, "0"
+selectObject: output, silence_tail
+output_extended = Concatenate
+removeObject: output, silence_tail
+output = output_extended
+Rename: "Output"
 
-writeInfoLine: "Processing blocks..."
-
-# C. Block Loop
-for b from 1 to n_blocks
-    t_start = (b - 1) * delay_sec
-    t_end = b * delay_sec
-    if t_end > dur
-        t_end = dur
+# Process each repeat
+for rep from 1 to number_of_repeats
+    appendInfoLine: "  Repeat ", rep, "/", number_of_repeats
+    
+    rep_delay = delay_sec * rep
+    fb_amount = feedback_base ^ rep  ; Exponential decay
+    
+    # Create delayed copy
+    selectObject: sound_work
+    delayed = Copy: "Delayed_" + string$(rep)
+    
+    # Apply feedback filter if enabled
+    if enable_filter
+        selectObject: delayed
+        filtered = Filter (pass Hann band): 0, filter_cutoff_hz, filter_cutoff_hz * 0.1
+        removeObject: delayed
+        delayed = filtered
+        
+        # Apply filter again for later repeats (cumulative darkening)
+        if rep > 2
+            selectObject: delayed
+            filtered = Filter (pass Hann band): 0, filter_cutoff_hz * 0.8, filter_cutoff_hz * 0.1
+            removeObject: delayed
+            delayed = filtered
+        endif
     endif
     
-    # 1. Extract Dry Chunk
-    selectObject: sound_work
-    Extract part: t_start, t_end, "rectangular", 1, "no"
-    Rename: "Block_Dry"
-    dry_id = selected("Sound")
+    # Scale by feedback amount
+    selectObject: delayed
+    Formula: "self * " + string$(fb_amount)
     
-    # 2. Extract Control Chunk (Mix and FB)
-    selectObject: controlSound
-    Extract part: t_start, t_end, "rectangular", 1, "no"
-    Rename: "Block_Ctrl"
-    ctrl_id = selected("Sound")
+    # Apply adaptive mix per frame (block-based)
+    for i from 1 to nFrames
+        t_start = (i - 1) * frame_step_sec
+        t_end = i * frame_step_sec
+        if t_end > duration
+            t_end = duration
+        endif
+        
+        mix_val = ctrl_mix_smooth#[i]
+        
+        selectObject: delayed
+        Formula (part): t_start, t_end, 1, 1, "self * " + string$(mix_val)
+    endfor
     
-    # 3. Apply Feedback Formula
-    selectObject: dry_id
-    plusObject: ctrl_id
-    plusObject: prev_block_id
+    # Add to output at delayed position
+    selectObject: delayed
+    delayed_name$ = selected$("Sound")
     
-    Formula: "self + Sound_Prev_Block[col] * Sound_Block_Ctrl[1, col] * Sound_Block_Ctrl[2, col]"
+    selectObject: output
+    Formula: "self + (if x >= " + string$(rep_delay) + " and x < " + string$(rep_delay + duration) + 
+        ... " then Sound_'delayed_name$'(x - " + string$(rep_delay) + ") else 0 fi)"
     
-    # 4. Store result ID in our Table
-    selectObject: idsTable
-    Set value: b, 1, dry_id
-    
-    # 5. Update Prev_Block for next iteration
-    selectObject: prev_block_id
-    Remove
-    selectObject: dry_id
-    Copy: "Prev_Block"
-    prev_block_id = selected("Sound")
-    
-    # Clean up temp objects
-    selectObject: ctrl_id
-    Remove
+    removeObject: delayed
 endfor
 
-# D. Concatenate (Safe ID-Table Method)
+# ============================================
+# FINALIZE
+# ============================================
 
-# 1. Read IDs into variables
-selectObject: idsTable
-for b from 1 to n_blocks
-    block_id_['b'] = Get value: b, 1
-endfor
-
-# 2. Select first block
-first_id = block_id_[1]
-selectObject: first_id
-
-# 3. Add remaining blocks
-for b from 2 to n_blocks
-    next_id = block_id_['b']
-    plusObject: next_id
-endfor
-
-# 4. Concatenate
-Concatenate
+selectObject: output
+Scale peak: 0.99
 Rename: original_name$ + "_neural_delay"
 outS = selected("Sound")
-Scale peak: 0.99
 
-# Remove individual blocks
-for b from 1 to n_blocks
-    del_id = block_id_['b']
-    selectObject: del_id
-    Remove
-endfor
+removeObject: sound_work
 
-# --- 8. Reporting ---
+selectObject: original_sound
+plusObject: outS
 
-appendInfoLine: "Processing Complete."
+appendInfoLine: ""
+appendInfoLine: "=== COMPLETE ==="
+selectObject: outS
+out_dur = Get total duration
+appendInfoLine: "Output: ", selected$("Sound")
+appendInfoLine: "Duration: ", fixed$(out_dur, 2), " s"
 
-# --- 9. Cleanup ---
-
-selectObject: prev_block_id
-Remove
-selectObject: idsTable
-Remove
-selectObject: sound_work
-Remove
-
-procedure SafeRemove (id)
-    if id <> 0
-        selectObject: id
-        Remove
-    endif
-endproc
-
-call SafeRemove: pitch
-call SafeRemove: intensity
-call SafeRemove: formant
-call SafeRemove: mfcc
-call SafeRemove: harmonicity
-call SafeRemove: xtab
-call SafeRemove: ytab
-call SafeRemove: ymat
-call SafeRemove: yal
-call SafeRemove: xmat
-call SafeRemove: pat
-call SafeRemove: ff
-call SafeRemove: afinal
-call SafeRemove: ypred
-call SafeRemove: ctrl
-call SafeRemove: ctrlMat
-call SafeRemove: ctrlMatT
-selectObject: controlSound
-Remove
-selectObject: "Sound Control_LowRes"
-Remove
-
-# Play Result (Optional)
 if play_result
+    appendInfoLine: "Playing..."
     selectObject: outS
     Play
 endif
 
+selectObject: outS
