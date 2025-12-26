@@ -3,36 +3,157 @@
 # Author: Shai Cohen
 # Affiliation: Department of Music, Bar-Ilan University, Israel
 # Email: shai.cohen@biu.ac.il
-# Version: 0.2 (2025)
+# Version: 0.3 (2025) - Optimized + Stereo
 # License: MIT License
 # Repository: https://github.com/ShaiCohen-ops/Praat-plugin_AudioTools
 #
 # Description:
 #   Neural Markov Soundscape Weaver
+#   Optimizations:
+#   - Proper overlap-add synthesis
+#   - Overlapping analysis for better transitions
+#   - Native arrays with state index
+#   - Stereo output (independent Markov walks)
+#   - Higher-order Markov option
+#   - Grain variation controls
+#
 # Citation:
 #   Cohen, S. (2025). Praat AudioTools: An Offline Analysis—Resynthesis Toolkit for Experimental Composition.
 #   https://github.com/ShaiCohen-ops/Praat-plugin_AudioTools
 # ============================================================
 
-# Neural Markov Soundscape Weaver
-# - Deconstructs audio into grains.
-# - Learns "Texture States" using K-Means Clustering.
-# - Learns "Temporal Grammar" (Transition Probabilities) using Markov Chains.
-# - Generates a new, infinite stream that follows the natural flow of the original.
-
 form Neural Markov Soundscape Weaver
+    comment === Preset ===
+    optionmenu Preset 1
+        option Manual (Use Settings Below)
+        option Ambient Flow
+        option Rhythmic Pulse
+        option Dense Texture
+        option Sparse Minimal
+        option Evolving Landscape
+        option Chaotic Transitions
+    
     comment === Analysis ===
-    positive grain_size_ms 80
-    integer  number_of_states 5
+    positive Grain_size_ms 80
+    positive Analysis_overlap 0.5
+    integer Number_of_states 5
+    
+    comment === Markov Chain ===
+    optionmenu Markov_order 1
+        option First Order (state to state)
+        option Second Order (pair to state)
+    real Randomness 0.0
+    comment (0 = follow learned probabilities, 1 = fully random)
     
     comment === Synthesis ===
-    positive output_duration_sec 15.0
+    positive Output_duration_sec 15.0
+    positive Synthesis_overlap 0.5
+    positive Crossfade_ms 10
+    
+    comment === Grain Variation ===
+    real Pitch_scatter_semitones 0.0
+    real Position_jitter 0.1
+    real Density_variation 0.0
     
     comment === Output ===
-    boolean  play_result 1
+    boolean Stereo_output 1
+    real Stereo_decorrelation 0.3
+    boolean Play_result 1
 endform
 
-# ===== 1. SETUP =====
+# ============================================
+# PRESET LOGIC
+# ============================================
+
+if preset$ = "Ambient Flow"
+    grain_size_ms = 100
+    analysis_overlap = 0.6
+    number_of_states = 4
+    markov_order = 1
+    randomness = 0.1
+    output_duration_sec = 20.0
+    synthesis_overlap = 0.6
+    crossfade_ms = 15
+    pitch_scatter_semitones = 0.0
+    position_jitter = 0.1
+    density_variation = 0.05
+    stereo_decorrelation = 0.4
+
+elsif preset$ = "Rhythmic Pulse"
+    grain_size_ms = 50
+    analysis_overlap = 0.3
+    number_of_states = 6
+    markov_order = 1
+    randomness = 0.05
+    output_duration_sec = 12.0
+    synthesis_overlap = 0.3
+    crossfade_ms = 5
+    pitch_scatter_semitones = 0.0
+    position_jitter = 0.0
+    density_variation = 0.0
+    stereo_decorrelation = 0.2
+
+elsif preset$ = "Dense Texture"
+    grain_size_ms = 40
+    analysis_overlap = 0.7
+    number_of_states = 8
+    markov_order = 2
+    randomness = 0.15
+    output_duration_sec = 15.0
+    synthesis_overlap = 0.7
+    crossfade_ms = 8
+    pitch_scatter_semitones = 0.3
+    position_jitter = 0.2
+    density_variation = 0.1
+    stereo_decorrelation = 0.5
+
+elsif preset$ = "Sparse Minimal"
+    grain_size_ms = 150
+    analysis_overlap = 0.4
+    number_of_states = 3
+    markov_order = 1
+    randomness = 0.2
+    output_duration_sec = 25.0
+    synthesis_overlap = 0.4
+    crossfade_ms = 25
+    pitch_scatter_semitones = 0.0
+    position_jitter = 0.15
+    density_variation = 0.1
+    stereo_decorrelation = 0.3
+
+elsif preset$ = "Evolving Landscape"
+    grain_size_ms = 120
+    analysis_overlap = 0.5
+    number_of_states = 5
+    markov_order = 2
+    randomness = 0.1
+    output_duration_sec = 30.0
+    synthesis_overlap = 0.6
+    crossfade_ms = 20
+    pitch_scatter_semitones = 0.2
+    position_jitter = 0.1
+    density_variation = 0.08
+    stereo_decorrelation = 0.6
+
+elsif preset$ = "Chaotic Transitions"
+    grain_size_ms = 60
+    analysis_overlap = 0.5
+    number_of_states = 10
+    markov_order = 1
+    randomness = 0.5
+    output_duration_sec = 12.0
+    synthesis_overlap = 0.5
+    crossfade_ms = 10
+    pitch_scatter_semitones = 0.8
+    position_jitter = 0.3
+    density_variation = 0.15
+    stereo_decorrelation = 0.7
+endif
+
+# ============================================
+# SETUP
+# ============================================
+
 nSelected = numberOfSelected("Sound")
 if nSelected <> 1
     exitScript: "Please select exactly one Sound object."
@@ -43,439 +164,613 @@ sndName$ = selected$("Sound")
 
 selectObject: snd
 dur = Get total duration
-fs  = Get sampling frequency
-nch = Get number of channels
+fs = Get sampling frequency
 
-# Work on Copy
-selectObject: snd
-Copy: "Analysis_Work"
-workSnd = selected("Sound")
-
-if nch > 1
-    selectObject: workSnd
-    Convert to mono
-    monoSnd = selected("Sound")
-    selectObject: workSnd
-    Remove
-    workSnd = monoSnd
-    selectObject: workSnd
-    Rename: "Analysis_Work"
+writeInfoLine: "=== NEURAL MARKOV SOUNDSCAPE WEAVER ==="
+appendInfoLine: "Preset: ", preset$
+appendInfoLine: "Grain: ", grain_size_ms, " ms | States: ", number_of_states
+appendInfoLine: "Markov Order: ", markov_order
+appendInfoLine: "Randomness: ", fixed$(randomness * 100, 0), "%"
+if stereo_output
+    appendInfoLine: "Output: Stereo (decorrelation: ", fixed$(stereo_decorrelation * 100, 0), "%)"
+else
+    appendInfoLine: "Output: Mono"
 endif
+appendInfoLine: "========================================="
+appendInfoLine: ""
 
-# Check Duration
+# Work on mono copy
+selectObject: snd
+workSnd = Convert to mono
+Rename: "Analysis_Work"
+
 grainSec = grain_size_ms / 1000
+stepSec = grainSec * (1 - analysis_overlap)
+crossfadeSec = crossfade_ms / 1000
+
 if dur < grainSec * 4
     removeObject: workSnd
     exitScript: "Sound is too short for analysis."
 endif
 
-# ===== 2. FEATURE EXTRACTION =====
-writeInfoLine: "Analyzing audio structure..."
+k = number_of_states
 
-# We use non-overlapping grains to build a discrete sequence
-nGrains = floor(dur / grainSec)
-nFeatures = 4
+# ============================================
+# FEATURE EXTRACTION (Native Arrays)
+# ============================================
 
-Create TableOfReal: "Features", nGrains, nFeatures
-featTable = selected("TableOfReal")
+appendInfoLine: "Analyzing audio structure..."
+
+nGrains = floor((dur - grainSec) / stepSec)
+if nGrains < k * 2
+    removeObject: workSnd
+    exitScript: "Not enough grains for ", k, " states."
+endif
+
+# Feature arrays
+feat_centroid# = zero#(nGrains)
+feat_bandwidth# = zero#(nGrains)
+feat_pitch# = zero#(nGrains)
+feat_hnr# = zero#(nGrains)
+grain_time# = zero#(nGrains)
+
+# Analysis objects
+selectObject: workSnd
+spec = To Spectrogram: grainSec, 8000, stepSec, 20, "Gaussian"
 
 selectObject: workSnd
-To Spectrogram: grainSec, 8000, grainSec, 20, "Gaussian"
-spec = selected("Spectrogram")
+pit = To Pitch: stepSec, 75, 600
 
 selectObject: workSnd
-To Pitch: grainSec, 75, 600
-pit = selected("Pitch")
-
-selectObject: workSnd
-To Harmonicity (cc): grainSec, 75, 0.1, 1.0
-hnr = selected("Harmonicity")
+hnr_obj = To Harmonicity (cc): stepSec, 75, 0.1, 1.0
 
 for i from 1 to nGrains
-    t = (i - 0.5) * grainSec
+    t = (i - 0.5) * stepSec
+    grain_time#[i] = t
     
-    # 1. Spectral Centroid
+    # Spectral features
     selectObject: spec
-    To Spectrum (slice): t
-    slice = selected("Spectrum")
-    cent = Get centre of gravity: 2
-    band = Get standard deviation: 2
-    Remove
+    slice = To Spectrum (slice): t
+    selectObject: slice
+    feat_centroid#[i] = Get centre of gravity: 2
+    feat_bandwidth#[i] = Get standard deviation: 2
+    removeObject: slice
     
-    # 2. Pitch
+    # Pitch
     selectObject: pit
     f0 = Get value at time: t, "Hertz", "Linear"
-    if f0 = undefined
-        f0 = 0
+    if f0 = undefined or f0 <= 0
+        feat_pitch#[i] = 0
+    else
+        feat_pitch#[i] = f0
     endif
     
-    # 3. HNR
-    selectObject: hnr
+    # HNR
+    selectObject: hnr_obj
     h = Get value at time: t, "cubic"
     if h = undefined
-        h = -50
+        feat_hnr#[i] = -50
+    else
+        feat_hnr#[i] = h
     endif
-    
-    selectObject: featTable
-    Set value: i, 1, cent
-    Set value: i, 2, band
-    Set value: i, 3, f0
-    Set value: i, 4, h
 endfor
 
-removeObject: spec, pit, hnr
+removeObject: spec, pit, hnr_obj
 
-# ===== 3. NORMALIZE & CLUSTER (MANUAL K-MEANS) =====
-writeInfoLine: "Learning states (Clustering)..."
+appendInfoLine: "  ", nGrains, " grains analyzed"
 
-# Z-Score Normalization
-selectObject: featTable
-for c from 1 to nFeatures
-    # Mean
-    sum = 0
-    for r from 1 to nGrains
-        v = Get value: r, c
-        sum = sum + v
-    endfor
-    mean = sum / nGrains
-    
-    # Stdev
-    sumSq = 0
-    for r from 1 to nGrains
-        v = Get value: r, c
-        diff = v - mean
-        sumSq = sumSq + diff*diff
-    endfor
-    sd = sqrt(sumSq / nGrains)
-    if sd = 0
-        sd = 1
-    endif
-    
-    # Apply
-    for r from 1 to nGrains
-        v = Get value: r, c
-        z = (v - mean) / sd
-        Set value: r, c, z
-    endfor
+# ============================================
+# NORMALIZE FEATURES (Z-Score)
+# ============================================
+
+# Centroid
+sum = 0
+for i to nGrains
+    sum += feat_centroid#[i]
+endfor
+mean_c = sum / nGrains
+sumSq = 0
+for i to nGrains
+    sumSq += (feat_centroid#[i] - mean_c)^2
+endfor
+std_c = sqrt(sumSq / nGrains)
+if std_c < 0.001
+    std_c = 1
+endif
+norm_centroid# = zero#(nGrains)
+for i to nGrains
+    norm_centroid#[i] = (feat_centroid#[i] - mean_c) / std_c
 endfor
 
-# K-Means
-k = number_of_states
-max_iter = 10
+# Bandwidth
+sum = 0
+for i to nGrains
+    sum += feat_bandwidth#[i]
+endfor
+mean_b = sum / nGrains
+sumSq = 0
+for i to nGrains
+    sumSq += (feat_bandwidth#[i] - mean_b)^2
+endfor
+std_b = sqrt(sumSq / nGrains)
+if std_b < 0.001
+    std_b = 1
+endif
+norm_bandwidth# = zero#(nGrains)
+for i to nGrains
+    norm_bandwidth#[i] = (feat_bandwidth#[i] - mean_b) / std_b
+endfor
 
-Create TableOfReal: "Centroids", k, nFeatures
-centroids = selected("TableOfReal")
+# Pitch
+sum = 0
+for i to nGrains
+    sum += feat_pitch#[i]
+endfor
+mean_p = sum / nGrains
+sumSq = 0
+for i to nGrains
+    sumSq += (feat_pitch#[i] - mean_p)^2
+endfor
+std_p = sqrt(sumSq / nGrains)
+if std_p < 0.001
+    std_p = 1
+endif
+norm_pitch# = zero#(nGrains)
+for i to nGrains
+    norm_pitch#[i] = (feat_pitch#[i] - mean_p) / std_p
+endfor
 
-# Init Centroids
+# HNR
+sum = 0
+for i to nGrains
+    sum += feat_hnr#[i]
+endfor
+mean_h = sum / nGrains
+sumSq = 0
+for i to nGrains
+    sumSq += (feat_hnr#[i] - mean_h)^2
+endfor
+std_h = sqrt(sumSq / nGrains)
+if std_h < 0.001
+    std_h = 1
+endif
+norm_hnr# = zero#(nGrains)
+for i to nGrains
+    norm_hnr#[i] = (feat_hnr#[i] - mean_h) / std_h
+endfor
+
+# ============================================
+# K-MEANS CLUSTERING (Array-based)
+# ============================================
+
+appendInfoLine: "Learning states (Clustering)..."
+
+# Centroid arrays
+cent_1# = zero#(k)
+cent_2# = zero#(k)
+cent_3# = zero#(k)
+cent_4# = zero#(k)
+
+# Initialize from random grains
 for c from 1 to k
-    randRow = randomInteger(1, nGrains)
-    for f from 1 to nFeatures
-        selectObject: featTable
-        val = Get value: randRow, f
-        selectObject: centroids
-        Set value: c, f, val
-    endfor
+    r = randomInteger(1, nGrains)
+    cent_1#[c] = norm_centroid#[r]
+    cent_2#[c] = norm_bandwidth#[r]
+    cent_3#[c] = norm_pitch#[r]
+    cent_4#[c] = norm_hnr#[r]
 endfor
 
-Create TableOfReal: "Assignments", nGrains, 1
-assigns = selected("TableOfReal")
+# Assignments (state sequence)
+state_seq# = zero#(nGrains)
 
-# Training Loop
+max_iter = 15
 for iter from 1 to max_iter
     changes = 0
     
-    # E-Step (Assign)
+    # E-step
     for i from 1 to nGrains
         minDist = 1e9
         bestK = 1
         
-        for f from 1 to nFeatures
-            selectObject: featTable
-            feat_'f' = Get value: i, f
-        endfor
-        
         for c from 1 to k
-            distSq = 0
-            for f from 1 to nFeatures
-                selectObject: centroids
-                cVal = Get value: c, f
-                d = feat_'f' - cVal
-                distSq = distSq + d*d
-            endfor
+            distSq = (norm_centroid#[i] - cent_1#[c])^2 +
+                ... (norm_bandwidth#[i] - cent_2#[c])^2 +
+                ... (norm_pitch#[i] - cent_3#[c])^2 +
+                ... (norm_hnr#[i] - cent_4#[c])^2
+            
             if distSq < minDist
                 minDist = distSq
                 bestK = c
             endif
         endfor
         
-        selectObject: assigns
-        oldK = Get value: i, 1
-        if oldK <> bestK
-            Set value: i, 1, bestK
-            changes = changes + 1
+        if state_seq#[i] <> bestK
+            state_seq#[i] = bestK
+            changes += 1
         endif
     endfor
     
-    # M-Step (Update)
+    # M-step
     for c from 1 to k
+        sum_1 = 0
+        sum_2 = 0
+        sum_3 = 0
+        sum_4 = 0
         count = 0
-        for f from 1 to nFeatures
-            sum_'f' = 0
-        endfor
+        
         for i from 1 to nGrains
-            selectObject: assigns
-            myK = Get value: i, 1
-            if myK = c
-                count = count + 1
-                for f from 1 to nFeatures
-                    selectObject: featTable
-                    val = Get value: i, f
-                    sum_'f' = sum_'f' + val
-                endfor
+            if state_seq#[i] = c
+                sum_1 += norm_centroid#[i]
+                sum_2 += norm_bandwidth#[i]
+                sum_3 += norm_pitch#[i]
+                sum_4 += norm_hnr#[i]
+                count += 1
             endif
         endfor
+        
         if count > 0
-            for f from 1 to nFeatures
-                avg = sum_'f' / count
-                selectObject: centroids
-                Set value: c, f, avg
-            endfor
+            cent_1#[c] = sum_1 / count
+            cent_2#[c] = sum_2 / count
+            cent_3#[c] = sum_3 / count
+            cent_4#[c] = sum_4 / count
         endif
     endfor
     
     if changes = 0
-        goto converged
+        appendInfoLine: "  Converged at iteration ", iter
+        iter = max_iter + 1
     endif
 endfor
-label converged
 
-# ===== 4. BUILD MARKOV CHAIN =====
-writeInfoLine: "Learning grammar (Markov Chain)..."
+# ============================================
+# BUILD STATE INDEX
+# ============================================
 
-# 1. Store State Sequence
-# 2. Store List of Grains per State (so we can pick one later)
+appendInfoLine: "  Building state index..."
 
-for c from 1 to k
-    count_in_state_'c' = 0
-endfor
-
-# Parse assignments to build lists
+state_count# = zero#(k)
 for i from 1 to nGrains
-    selectObject: assigns
-    state = Get value: i, 1
-    
-    # Save sequence for Markov
-    seq_'i' = state
-    
-    # Save grain index for Synthesis
-    idx = count_in_state_'state' + 1
-    count_in_state_'state' = idx
-    state_'state'_grain_'idx' = i
+    s = state_seq#[i]
+    state_count#[s] += 1
 endfor
 
-# Build Transition Matrix (K x K)
-# Row = Current State, Col = Next State Probability
-Create TableOfReal: "Transitions", k, k
-transMat = selected("TableOfReal")
-
-# Count transitions
-for i from 1 to nGrains-1
-    curr = seq_'i'
-    next = seq_'i'+1
-    # Note: seq_'i+1' syntax is tricky, pre-calc index
-    next_idx = i + 1
-    next = seq_'next_idx'
-    
-    selectObject: transMat
-    oldVal = Get value: curr, next
-    Set value: curr, next, oldVal + 1
+state_offset# = zero#(k + 1)
+state_offset#[1] = 0
+for s from 2 to k + 1
+    state_offset#[s] = state_offset#[s-1] + state_count#[s-1]
 endfor
 
-# Normalize Rows to Probabilities
-for r from 1 to k
-    rowSum = 0
-    selectObject: transMat
-    for c from 1 to k
-        val = Get value: r, c
-        rowSum = rowSum + val
+state_index# = zero#(nGrains)
+state_fill# = zero#(k)
+
+for i from 1 to nGrains
+    s = state_seq#[i]
+    pos = state_offset#[s] + state_fill#[s] + 1
+    state_index#[pos] = i
+    state_fill#[s] += 1
+endfor
+
+# ============================================
+# BUILD MARKOV TRANSITION MATRIX
+# ============================================
+
+appendInfoLine: "Learning grammar (Markov Chain)..."
+
+if markov_order = 1
+    # First-order: k x k matrix
+    trans# = zero#(k * k)
+    
+    for i from 1 to nGrains - 1
+        curr = state_seq#[i]
+        next = state_seq#[i + 1]
+        idx = (curr - 1) * k + next
+        trans#[idx] += 1
     endfor
     
-    if rowSum > 0
+    # Normalize rows
+    for r from 1 to k
+        row_sum = 0
         for c from 1 to k
-            val = Get value: r, c
-            Set value: r, c, val / rowSum
-        endfor
-    else
-        # If dead end, uniform probability to all
-        for c from 1 to k
-            Set value: r, c, 1/k
-        endfor
-    endif
-endfor
-
-removeObject: featTable, centroids, assigns
-
-# ===== 5. GENERATIVE SYNTHESIS =====
-writeInfoLine: "Weaving soundscape..."
-
-# We generate blocks to manage memory
-grains_needed = ceiling(output_duration_sec / grainSec)
-block_size = 50
-
-# Output Containers
-Create TableOfReal: "BlockIDs", 10000, 1
-blockTable = selected("TableOfReal")
-block_count = 0
-
-Create TableOfReal: "GrainIDs", block_size, 1
-grainTable = selected("TableOfReal")
-
-# Start at random state
-current_state = randomInteger(1, k)
-total_generated = 0
-
-while total_generated < grains_needed
-    grains_in_block = 0
-    
-    for b from 1 to block_size
-        # 1. Pick a grain from the CURRENT state
-        # (This is the texture for this moment)
-        if count_in_state_'current_state' > 0
-            max_g = count_in_state_'current_state'
-            r_idx = randomInteger(1, max_g)
-            grain_index = state_'current_state'_grain_'r_idx'
-            
-            # Extract
-            t_start = (grain_index - 1) * grainSec
-            t_end = t_start + grainSec
-            
-            selectObject: workSnd
-            # Use Hanning for smooth crossfade, or Rectangular for rhythmic
-            # Let's use Hanning for ambient flow
-            Extract part: t_start, t_end, "Hanning", 1, "no"
-            gid = selected("Sound")
-            
-            grains_in_block = grains_in_block + 1
-            selectObject: grainTable
-            Set value: grains_in_block, 1, gid
-        endif
-        
-        # 2. Determine NEXT state using Markov Matrix
-        roll = randomUniform(0, 1)
-        cumSum = 0
-        next_state = 1
-        
-        selectObject: transMat
-        for c from 1 to k
-            prob = Get value: current_state, c
-            cumSum = cumSum + prob
-            if roll <= cumSum
-                next_state = c
-                goto found_next
-            endif
+            idx = (r - 1) * k + c
+            row_sum += trans#[idx]
         endfor
         
-        # Fallback (rounding errors)
-        next_state = k 
-        
-        label found_next
-        current_state = next_state
-        
-        total_generated = total_generated + 1
-        if total_generated >= grains_needed
-            goto finish_block
-        endif
-    endfor
-    
-    label finish_block
-    
-    # Concatenate Block (Safe Logic)
-    if grains_in_block > 0
-        # Read IDs
-        selectObject: grainTable
-        for g from 1 to grains_in_block
-            gid_'g' = Get value: g, 1
-        endfor
-        
-        # Select
-        selectObject: gid_1
-        for g from 2 to grains_in_block
-            plusObject: gid_'g'
-        endfor
-        
-        # Concatenate (Standard Concatenate works fine with Hanning -> Constant Power)
-        if grains_in_block > 1
-            Concatenate
-            blockMix = selected("Sound")
+        if row_sum > 0
+            for c from 1 to k
+                idx = (r - 1) * k + c
+                trans#[idx] /= row_sum
+            endfor
         else
-            selectObject: gid_1
-            Copy: "Block"
-            blockMix = selected("Sound")
+            for c from 1 to k
+                idx = (r - 1) * k + c
+                trans#[idx] = 1 / k
+            endfor
         endif
-        
-        block_count = block_count + 1
-        selectObject: blockTable
-        Set value: block_count, 1, blockMix
-        
-        # Cleanup grains
-        for g from 1 to grains_in_block
-            selectObject: gid_'g'
-            Remove
-        endfor
-    endif
-    
-    if total_generated >= grains_needed
-        goto finalize
-    endif
-endwhile
-
-label finalize
-
-# ===== 6. FINAL MERGE =====
-writeInfoLine: "Finalizing..."
-
-if block_count > 0
-    # Read IDs
-    selectObject: blockTable
-    for b from 1 to block_count
-        bid_'b' = Get value: b, 1
     endfor
     
-    # Select
-    selectObject: bid_1
-    for b from 2 to block_count
-        plusObject: bid_'b'
-    endfor
+    appendInfoLine: "  First-order matrix built"
     
-    # Merge
-    if block_count > 1
-        Concatenate
-        finalOut = selected("Sound")
-    else
-        selectObject: bid_1
-        Copy: "Final"
-        finalOut = selected("Sound")
-    endif
-    
-    Rename: sndName$ + "_MarkovWeave"
-    Scale peak: 0.99
-    
-    # Cleanup Blocks
-    for b from 1 to block_count
-        selectObject: bid_'b'
-        Remove
-    endfor
 else
-    exitScript: "Synthesis failed."
+    # Second-order: k*k x k matrix (pairs to next state)
+    n_pairs = k * k
+    trans2# = zero#(n_pairs * k)
+    
+    for i from 1 to nGrains - 2
+        prev = state_seq#[i]
+        curr = state_seq#[i + 1]
+        next = state_seq#[i + 2]
+        pair_idx = (prev - 1) * k + curr
+        idx = (pair_idx - 1) * k + next
+        trans2#[idx] += 1
+    endfor
+    
+    # Normalize
+    for pair from 1 to n_pairs
+        row_sum = 0
+        for c from 1 to k
+            idx = (pair - 1) * k + c
+            row_sum += trans2#[idx]
+        endfor
+        
+        if row_sum > 0
+            for c from 1 to k
+                idx = (pair - 1) * k + c
+                trans2#[idx] /= row_sum
+            endfor
+        else
+            for c from 1 to k
+                idx = (pair - 1) * k + c
+                trans2#[idx] = 1 / k
+            endfor
+        endif
+    endfor
+    
+    appendInfoLine: "  Second-order matrix built"
 endif
 
-# ===== CLEANUP =====
-removeObject: workSnd, transMat, blockTable, grainTable
+# ============================================
+# GENERATIVE SYNTHESIS (Overlap-Add)
+# ============================================
 
-appendInfoLine: "Done! Created ", output_duration_sec, "s of Markov-generated audio."
+appendInfoLine: "Weaving soundscape..."
+
+synth_step = grainSec * (1 - synthesis_overlap)
+grains_needed = ceiling(output_duration_sec / synth_step)
+output_dur = output_duration_sec + grainSec
+
+if stereo_output
+    n_passes = 2
+else
+    n_passes = 1
+endif
+
+for pass from 1 to n_passes
+    if stereo_output
+        if pass = 1
+            appendInfoLine: "  LEFT channel..."
+        else
+            appendInfoLine: "  RIGHT channel..."
+        endif
+    else
+        appendInfoLine: "  Generating..."
+    endif
+    
+    # Create output buffer
+    output_buf = Create Sound from formula: "Output_" + string$(pass), 1, 0, output_dur, fs, "0"
+    
+    # Initialize Markov state
+    current_state = randomInteger(1, k)
+    prev_state = randomInteger(1, k)
+    
+    # For stereo decorrelation
+    if pass = 2 and stereo_decorrelation > 0
+        # Start at different state for R channel
+        current_state = ((current_state + floor(k * stereo_decorrelation)) mod k) + 1
+    endif
+    
+    for g from 1 to grains_needed
+        # Output time
+        t_out = (g - 1) * synth_step
+        
+        # Apply density variation
+        if density_variation > 0
+            t_out = t_out + randomUniform(-1, 1) * density_variation * synth_step
+            if t_out < 0
+                t_out = 0
+            endif
+        endif
+        
+        # Select grain from current state
+        if state_count#[current_state] > 0
+            r_idx = randomInteger(1, state_count#[current_state])
+            idx_pos = state_offset#[current_state] + r_idx
+            grain_idx = state_index#[idx_pos]
+        else
+            grain_idx = randomInteger(1, nGrains)
+        endif
+        
+        # Get grain time with jitter
+        t_grain = grain_time#[grain_idx]
+        if position_jitter > 0
+            t_grain = t_grain + randomUniform(-1, 1) * position_jitter * grainSec
+            t_grain = max(grainSec/2, min(dur - grainSec/2, t_grain))
+        endif
+        
+        t_start = t_grain - grainSec/2
+        t_end = t_grain + grainSec/2
+        
+        if t_start < 0
+            t_start = 0
+            t_end = grainSec
+        endif
+        if t_end > dur
+            t_end = dur
+            t_start = dur - grainSec
+            if t_start < 0
+                t_start = 0
+            endif
+        endif
+        
+        # Extract grain with Hanning window
+        selectObject: workSnd
+        grain = Extract part: t_start, t_end, "Hanning", 1, "no"
+        
+        # Apply pitch scatter
+        if pitch_scatter_semitones > 0
+            selectObject: grain
+            scatter = randomUniform(-pitch_scatter_semitones, pitch_scatter_semitones)
+            ratio = 2 ^ (scatter / 12)
+            orig_fs = Get sampling frequency
+            new_fs = orig_fs * ratio
+            if new_fs > 8000 and new_fs < 96000
+                Resample: new_fs, 50
+                Override sampling frequency: orig_fs
+                grain_new = selected("Sound")
+                removeObject: grain
+                grain = grain_new
+            endif
+        endif
+        
+        # Apply crossfade envelope
+        if crossfadeSec > 0
+            selectObject: grain
+            grain_dur = Get total duration
+            fade = min(crossfadeSec, grain_dur * 0.4)
+            Formula: "self * (if x < " + string$(fade) + " then x/" + string$(fade) +
+                ... " else if x > " + string$(grain_dur - fade) + " then (" + string$(grain_dur) + "-x)/" + string$(fade) +
+                ... " else 1 fi fi)"
+        endif
+        
+        # Add to output (overlap-add)
+        selectObject: grain
+        grain_name$ = selected$("Sound")
+        grain_dur = Get total duration
+        
+        selectObject: output_buf
+        Formula (part): t_out, t_out + grain_dur, 1, 1,
+            ... "self + Sound_'grain_name$'(x - " + string$(t_out) + ")"
+        
+        removeObject: grain
+        
+        # Determine next state using Markov chain
+        if randomUniform(0, 1) < randomness
+            # Random jump
+            next_state = randomInteger(1, k)
+        else
+            # Follow transition probabilities
+            roll = randomUniform(0, 1)
+            cumSum = 0
+            next_state = 1
+            
+            if markov_order = 1
+                for c from 1 to k
+                    idx = (current_state - 1) * k + c
+                    cumSum += trans#[idx]
+                    if roll <= cumSum
+                        next_state = c
+                        c = k + 1
+                    endif
+                endfor
+            else
+                pair_idx = (prev_state - 1) * k + current_state
+                for c from 1 to k
+                    idx = (pair_idx - 1) * k + c
+                    cumSum += trans2#[idx]
+                    if roll <= cumSum
+                        next_state = c
+                        c = k + 1
+                    endif
+                endfor
+            endif
+        endif
+        
+        # For stereo: occasional decorrelation
+        if pass = 2 and stereo_decorrelation > 0
+            if randomUniform(0, 1) < stereo_decorrelation * 0.3
+                next_state = randomInteger(1, k)
+            endif
+        endif
+        
+        prev_state = current_state
+        current_state = next_state
+    endfor
+    
+    # Normalize for overlap-add gain
+    selectObject: output_buf
+    if synthesis_overlap > 0.3
+        gain_comp = 1 / (1 + synthesis_overlap * 0.7)
+        Formula: "self * " + string$(gain_comp)
+    endif
+    
+    if pass = 1
+        channel_left = output_buf
+    else
+        channel_right = output_buf
+    endif
+endfor
+
+# ============================================
+# COMBINE OUTPUT
+# ============================================
+
+if stereo_output
+    appendInfoLine: "Combining to stereo..."
+    
+    selectObject: channel_left
+    dur_L = Get total duration
+    selectObject: channel_right
+    dur_R = Get total duration
+    
+    min_dur = min(dur_L, dur_R)
+    
+    if dur_L > min_dur
+        selectObject: channel_left
+        tmp = Extract part: 0, min_dur, "rectangular", 1, "no"
+        removeObject: channel_left
+        channel_left = tmp
+    endif
+    if dur_R > min_dur
+        selectObject: channel_right
+        tmp = Extract part: 0, min_dur, "rectangular", 1, "no"
+        removeObject: channel_right
+        channel_right = tmp
+    endif
+    
+    selectObject: channel_left, channel_right
+    finalOut = Combine to stereo
+    Rename: sndName$ + "_MarkovWeave_stereo"
+    
+    removeObject: channel_left, channel_right
+else
+    finalOut = channel_left
+    Rename: sndName$ + "_MarkovWeave"
+endif
+
+selectObject: finalOut
+Scale peak: 0.99
+
+# ============================================
+# CLEANUP
+# ============================================
+
+removeObject: workSnd
+
+selectObject: snd
+plusObject: finalOut
+
+appendInfoLine: ""
+appendInfoLine: "=== COMPLETE ==="
+selectObject: finalOut
+n_ch = Get number of channels
+out_dur = Get total duration
+appendInfoLine: "Output: ", selected$("Sound")
+appendInfoLine: "Duration: ", fixed$(out_dur, 2), " s"
+appendInfoLine: "Channels: ", n_ch
 
 if play_result
+    appendInfoLine: "Playing..."
     selectObject: finalOut
     Play
 endif
 
+selectObject: finalOut
