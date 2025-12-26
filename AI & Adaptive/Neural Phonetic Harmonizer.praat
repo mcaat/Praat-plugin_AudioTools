@@ -1,319 +1,576 @@
 # ============================================================
-# Praat AudioTools - Neural Phonetic Harmonizer (FFNet, Adaptive++)
+# Praat AudioTools - Neural Phonetic Harmonizer
 # Author: Shai Cohen
 # Affiliation: Department of Music, Bar-Ilan University, Israel
 # Email: shai.cohen@biu.ac.il
-# Version: 0.2 (2025)
+# Version: 0.3 (2025) - Optimized + Stereo
 # License: MIT License
 # Repository: https://github.com/ShaiCohen-ops/Praat-plugin_AudioTools
 #
 # Description:
 #   Neural Phonetic Harmonizer with adaptive pitch shifting per phonetic class
-#   OPTIMIZED: Uses IntensityTiers instead of per-sample processing
 #
 # Citation:
 #   Cohen, S. (2025). Praat AudioTools: An Offline Analysis—Resynthesis Toolkit for Experimental Composition.
 #   https://github.com/ShaiCohen-ops/Praat-plugin_AudioTools
 # ============================================================
 
-# Neural Phonetic Harmonizer 
-# - Fixed "Unknown variable h1" (Scope issue).
-# - Fixed "break" variable issue.
-# - Optimized for speed.
-
-form Neural Phonetic Harmonizer (FFNet, Adaptive++)
-    comment Harmony Intervals (semitones):
-    real vowel_semitones 7.0
-    real fric_semitones -5.0
-    real other_semitones 4.0
-    real silence_semitones 0.0
-    comment Harmony Mix Levels (0-1, higher = stronger):
-    positive vowel_mix 1.2
-    positive fric_mix 0.9
-    positive other_mix 1.0
-    positive silence_mix 0.2
-    comment Processing:
-    positive confidence_threshold 0.20
-    positive temperature 0.3
-    positive voiced_boost 0.2
-    comment Network (defaults work well):
-    integer hidden_units 24
-    integer training_iterations 3000
-    positive learning_rate 0.001
-    comment Output:
-    boolean create_stereo 1
-    boolean play_result 1
+form Neural Phonetic Harmonizer
+    comment === Preset ===
+    optionmenu Preset 1
+        option Manual (Use Settings Below)
+        option Octave Chorus
+        option Fifth Harmony
+        option Vowel Choir
+        option Dark Consonants
+        option Shimmer
+        option Detuned Unison
+        option Major Chord
+        option Minor Chord
+    
+    comment === Harmony Intervals (semitones) ===
+    real Vowel_interval_1 7.0
+    real Vowel_interval_2 0.0
+    real Consonant_interval -5.0
+    real Other_interval 4.0
+    
+    comment === Mix Levels (0-1) ===
+    positive Vowel_level 0.7
+    positive Consonant_level 0.5
+    positive Other_level 0.6
+    positive Wet_dry_mix 0.5
+    
+    comment === Processing ===
+    positive Smoothing_ms 20
+    positive Temperature 0.3
+    
+    comment === Output ===
+    boolean Stereo_output 1
+    real Stereo_width 0.5
+    boolean Play_result 1
 endform
 
+# ============================================
+# PRESET LOGIC
+# ============================================
+
+if preset$ = "Octave Chorus"
+    vowel_interval_1 = 12.0
+    vowel_interval_2 = 0.0
+    consonant_interval = 12.0
+    other_interval = 12.0
+    vowel_level = 0.6
+    consonant_level = 0.4
+    other_level = 0.5
+    wet_dry_mix = 0.4
+    temperature = 0.3
+    stereo_width = 0.6
+
+elsif preset$ = "Fifth Harmony"
+    vowel_interval_1 = 7.0
+    vowel_interval_2 = 0.0
+    consonant_interval = 7.0
+    other_interval = 7.0
+    vowel_level = 0.7
+    consonant_level = 0.5
+    other_level = 0.6
+    wet_dry_mix = 0.5
+    temperature = 0.25
+    stereo_width = 0.5
+
+elsif preset$ = "Vowel Choir"
+    vowel_interval_1 = 7.0
+    vowel_interval_2 = 12.0
+    consonant_interval = 0.0
+    other_interval = 4.0
+    vowel_level = 0.9
+    consonant_level = 0.2
+    other_level = 0.4
+    wet_dry_mix = 0.6
+    temperature = 0.2
+    stereo_width = 0.7
+
+elsif preset$ = "Dark Consonants"
+    vowel_interval_1 = 0.0
+    vowel_interval_2 = 0.0
+    consonant_interval = -12.0
+    other_interval = -7.0
+    vowel_level = 0.3
+    consonant_level = 0.8
+    other_level = 0.6
+    wet_dry_mix = 0.5
+    temperature = 0.35
+    stereo_width = 0.4
+
+elsif preset$ = "Shimmer"
+    vowel_interval_1 = 12.0
+    vowel_interval_2 = 19.0
+    consonant_interval = 12.0
+    other_interval = 12.0
+    vowel_level = 0.5
+    consonant_level = 0.3
+    other_level = 0.4
+    wet_dry_mix = 0.4
+    temperature = 0.2
+    stereo_width = 0.8
+
+elsif preset$ = "Detuned Unison"
+    vowel_interval_1 = 0.15
+    vowel_interval_2 = -0.15
+    consonant_interval = 0.1
+    other_interval = 0.12
+    vowel_level = 0.8
+    consonant_level = 0.6
+    other_level = 0.7
+    wet_dry_mix = 0.5
+    temperature = 0.3
+    stereo_width = 0.9
+
+elsif preset$ = "Major Chord"
+    vowel_interval_1 = 4.0
+    vowel_interval_2 = 7.0
+    consonant_interval = 4.0
+    other_interval = 7.0
+    vowel_level = 0.7
+    consonant_level = 0.5
+    other_level = 0.6
+    wet_dry_mix = 0.5
+    temperature = 0.25
+    stereo_width = 0.6
+
+elsif preset$ = "Minor Chord"
+    vowel_interval_1 = 3.0
+    vowel_interval_2 = 7.0
+    consonant_interval = 3.0
+    other_interval = 7.0
+    vowel_level = 0.7
+    consonant_level = 0.5
+    other_level = 0.6
+    wet_dry_mix = 0.5
+    temperature = 0.25
+    stereo_width = 0.6
+endif
+
 # Hidden parameters
-train_chunk = 100
-# Stop if cost changes less than this %
-early_stop_ratio = 0.001 
-early_stop_patience = 5
-frame_step_seconds = 0.01
-max_formant_hz = 5500
+frame_step_sec = 0.01
+hidden_units = 16
+training_iterations = 1000
+learning_rate = 0.001
 vowel_hnr_threshold = 5.0
 fricative_hnr_max = 3.0
-silence_intensity_threshold = 45
-enable_vowel = 1
-enable_fric = 1
-enable_other = 1
-enable_silence = 1
+silence_threshold = 45
 
-# ===== INIT =====
+# ============================================
+# SETUP
+# ============================================
+
+nSelected = numberOfSelected("Sound")
+if nSelected <> 1
+    exitScript: "Please select exactly one Sound object."
+endif
+
 sound = selected("Sound")
 sound_name$ = selected$("Sound")
-if sound = 0
-    exitScript: "Error: No sound selected."
-endif
 
 selectObject: sound
 duration = Get total duration
-sampling_rate = Get sampling frequency
-if duration < frame_step_seconds
-    exitScript: "Error: Sound duration too short."
+fs = Get sampling frequency
+
+if duration < 0.1
+    exitScript: "Sound is too short (minimum 0.1 seconds)."
 endif
 
-# ===== ANALYSIS =====
-writeInfoLine: "Analyzing audio features..."
+writeInfoLine: "=== NEURAL PHONETIC HARMONIZER ==="
+appendInfoLine: "Preset: ", preset$
+appendInfoLine: "Vowel intervals: ", vowel_interval_1, " / ", vowel_interval_2, " st"
+appendInfoLine: "Consonant: ", consonant_interval, " st | Other: ", other_interval, " st"
+appendInfoLine: "Wet/Dry: ", fixed$(wet_dry_mix * 100, 0), "%"
+if stereo_output
+    appendInfoLine: "Output: Stereo (width: ", fixed$(stereo_width * 100, 0), "%)"
+else
+    appendInfoLine: "Output: Mono"
+endif
+appendInfoLine: "===================================="
+appendInfoLine: ""
 
+# Work on mono for analysis
 selectObject: sound
-To Pitch: 0, 75, 600
-pitch = selected("Pitch")
+workSnd = Convert to mono
+Rename: "Work"
 
-selectObject: sound
-To Intensity: 75, 0, "yes"
-intensity = selected("Intensity")
+# ============================================
+# FEATURE EXTRACTION (Native Arrays)
+# ============================================
 
-selectObject: sound
-To Formant (burg): 0, 5, max_formant_hz, 0.025, 50
-formant = selected("Formant")
+appendInfoLine: "Analyzing phonetic features..."
 
-selectObject: sound
-To MFCC: 12, 0.025, frame_step_seconds, 100, 100, 0
-mfcc = selected("MFCC")
+nFrames = floor(duration / frame_step_sec)
+if nFrames < 10
+    nFrames = 10
+endif
 
-selectObject: sound
-To Harmonicity (cc): frame_step_seconds, 75, 0.1, 1.0
-harmonicity = selected("Harmonicity")
+# Feature arrays
+feat_mfcc_1# = zero#(nFrames)
+feat_mfcc_2# = zero#(nFrames)
+feat_mfcc_3# = zero#(nFrames)
+feat_f1# = zero#(nFrames)
+feat_f2# = zero#(nFrames)
+feat_intensity# = zero#(nFrames)
+feat_hnr# = zero#(nFrames)
+feat_pitch# = zero#(nFrames)
+frame_time# = zero#(nFrames)
 
-# Validate frames
-selectObject: mfcc
-nFrames = Get number of frames
-rows_target = nFrames
-n_features = 18
+# Category arrays
+cat_vowel# = zero#(nFrames)
+cat_consonant# = zero#(nFrames)
+cat_other# = zero#(nFrames)
+cat_silence# = zero#(nFrames)
 
-# ===== FEATURE MATRIX =====
-Create TableOfReal: "features", rows_target, n_features
-feature_matrix = selected("TableOfReal")
+# Create analysis objects
+selectObject: workSnd
+pitch_obj = To Pitch: 0, 75, 600
 
-# ----- Optimized Feature Extraction -----
-# 1. MFCCs
-selectObject: mfcc
-for i from 1 to rows_target
-    for c from 1 to 12
-        v = Get value in frame: i, c
+selectObject: workSnd
+intensity_obj = To Intensity: 75, 0, "yes"
+
+selectObject: workSnd
+formant_obj = To Formant (burg): 0, 5, 5500, 0.025, 50
+
+selectObject: workSnd
+mfcc_obj = To MFCC: 12, 0.025, frame_step_sec, 100, 100, 0
+
+selectObject: workSnd
+hnr_obj = To Harmonicity (cc): frame_step_sec, 75, 0.1, 1.0
+
+selectObject: mfcc_obj
+nFrames_mfcc = Get number of frames
+
+# Extract RAW features
+for i from 1 to nFrames
+    t = (i - 0.5) * frame_step_sec
+    frame_time#[i] = t
+    
+    # MFCCs
+    iM = min(i, nFrames_mfcc)
+    selectObject: mfcc_obj
+    for c from 1 to 3
+        v = Get value in frame: iM, c
         if v = undefined
             v = 0
         endif
-        
-        col_idx = 0
-        if c <= 3
-            col_idx = c
+        if c = 1
+            feat_mfcc_1#[i] = v
+        elsif c = 2
+            feat_mfcc_2#[i] = v
         else
-            col_idx = 9 + c - 3
+            feat_mfcc_3#[i] = v
         endif
-        
-        selectObject: feature_matrix
-        Set value: i, col_idx, v
-        selectObject: mfcc
     endfor
-endfor
-
-# 2. Formants
-selectObject: formant
-for i from 1 to rows_target
-    t = frame_step_seconds * (i - 0.5)
+    
+    # Formants
+    selectObject: formant_obj
     f1 = Get value at time: 1, t, "Hertz", "Linear"
     f2 = Get value at time: 2, t, "Hertz", "Linear"
-    f3 = Get value at time: 3, t, "Hertz", "Linear"
     if f1 = undefined
         f1 = 500
     endif
     if f2 = undefined
         f2 = 1500
     endif
-    if f3 = undefined
-        f3 = 2500
+    feat_f1#[i] = f1
+    feat_f2#[i] = f2
+    
+    # Intensity
+    selectObject: intensity_obj
+    iv = Get value at time: t, "cubic"
+    if iv = undefined
+        iv = 50
     endif
+    feat_intensity#[i] = iv
     
-    selectObject: feature_matrix
-    Set value: i, 4, f1 / 1000
-    Set value: i, 5, f2 / 1000
-    Set value: i, 6, f3 / 1000
-    selectObject: formant
-endfor
-
-# 3. Intensity, Harmonicity, Pitch
-for i from 1 to rows_target
-    t = frame_step_seconds * (i - 0.5)
-    
-    selectObject: intensity
-    it = Get value at time: t, "cubic"
-    if it = undefined
-        it = 60
-    endif
-    
-    selectObject: harmonicity
+    # HNR
+    selectObject: hnr_obj
     hnr = Get value at time: t, "cubic"
     if hnr = undefined
         hnr = 0
     endif
+    feat_hnr#[i] = hnr
     
-    selectObject: pitch
+    # Pitch
+    selectObject: pitch_obj
     f0 = Get value at time: t, "Hertz", "Linear"
     if f0 = undefined or f0 <= 0
-        z = 0.5
+        feat_pitch#[i] = 0
     else
-        z = f0 / 500
-        if z > 1
-            z = 1
-        endif
+        feat_pitch#[i] = f0
     endif
     
-    selectObject: feature_matrix
-    Set value: i, 7, (it - 60) / 20
-    Set value: i, 8, hnr / 20
-    Set value: i, 9, z
+    # Classify frame
+    if iv < silence_threshold
+        cat_silence#[i] = 1
+    elsif hnr > vowel_hnr_threshold and f0 > 0 and f1 > 300
+        cat_vowel#[i] = 1
+    elsif iv > silence_threshold and hnr < fricative_hnr_max and f0 <= 0
+        cat_consonant#[i] = 1
+    else
+        cat_other#[i] = 1
+    endif
 endfor
 
-# ===== TARGET CATEGORIES =====
-Create Categories: "output_categories"
-output_categories = selected("Categories")
+removeObject: pitch_obj, intensity_obj, formant_obj, mfcc_obj, hnr_obj
 
-# Pre-calculate categories (Fast loop)
-for i from 1 to rows_target
-    t = frame_step_seconds * (i - 0.5)
-    
-    selectObject: intensity
-    int_val = Get value at time: t, "cubic"
-    if int_val = undefined
-        int_val = -100
-    endif
-    
-    selectObject: harmonicity
-    hnr_val = Get value at time: t, "cubic"
-    if hnr_val = undefined
-        hnr_val = -100
-    endif
-    
-    selectObject: pitch
-    f0_val = Get value at time: t, "Hertz", "Linear"
-    if f0_val = undefined
-        f0_val = 0
-    endif
-    
-    selectObject: formant
-    f1_val = Get value at time: 1, t, "Hertz", "Linear"
-    if f1_val = undefined
-        f1_val = 500
-    endif
+appendInfoLine: "  ", nFrames, " frames analyzed"
 
-    selectObject: output_categories
-    if int_val < silence_intensity_threshold
-        Append category: "silence"
-    elsif hnr_val > vowel_hnr_threshold and f0_val > 0 and f1_val > 300
+# ============================================
+# NORMALIZE ALL FEATURES TO [0, 1]
+# ============================================
+
+appendInfoLine: "Normalizing features..."
+
+# MFCC 1
+min_v = feat_mfcc_1#[1]
+max_v = feat_mfcc_1#[1]
+for i from 2 to nFrames
+    if feat_mfcc_1#[i] < min_v
+        min_v = feat_mfcc_1#[i]
+    endif
+    if feat_mfcc_1#[i] > max_v
+        max_v = feat_mfcc_1#[i]
+    endif
+endfor
+range = max_v - min_v
+if range < 0.0001
+    range = 1
+endif
+for i from 1 to nFrames
+    feat_mfcc_1#[i] = (feat_mfcc_1#[i] - min_v) / range
+endfor
+
+# MFCC 2
+min_v = feat_mfcc_2#[1]
+max_v = feat_mfcc_2#[1]
+for i from 2 to nFrames
+    if feat_mfcc_2#[i] < min_v
+        min_v = feat_mfcc_2#[i]
+    endif
+    if feat_mfcc_2#[i] > max_v
+        max_v = feat_mfcc_2#[i]
+    endif
+endfor
+range = max_v - min_v
+if range < 0.0001
+    range = 1
+endif
+for i from 1 to nFrames
+    feat_mfcc_2#[i] = (feat_mfcc_2#[i] - min_v) / range
+endfor
+
+# MFCC 3
+min_v = feat_mfcc_3#[1]
+max_v = feat_mfcc_3#[1]
+for i from 2 to nFrames
+    if feat_mfcc_3#[i] < min_v
+        min_v = feat_mfcc_3#[i]
+    endif
+    if feat_mfcc_3#[i] > max_v
+        max_v = feat_mfcc_3#[i]
+    endif
+endfor
+range = max_v - min_v
+if range < 0.0001
+    range = 1
+endif
+for i from 1 to nFrames
+    feat_mfcc_3#[i] = (feat_mfcc_3#[i] - min_v) / range
+endfor
+
+# F1
+min_v = feat_f1#[1]
+max_v = feat_f1#[1]
+for i from 2 to nFrames
+    if feat_f1#[i] < min_v
+        min_v = feat_f1#[i]
+    endif
+    if feat_f1#[i] > max_v
+        max_v = feat_f1#[i]
+    endif
+endfor
+range = max_v - min_v
+if range < 0.0001
+    range = 1
+endif
+for i from 1 to nFrames
+    feat_f1#[i] = (feat_f1#[i] - min_v) / range
+endfor
+
+# F2
+min_v = feat_f2#[1]
+max_v = feat_f2#[1]
+for i from 2 to nFrames
+    if feat_f2#[i] < min_v
+        min_v = feat_f2#[i]
+    endif
+    if feat_f2#[i] > max_v
+        max_v = feat_f2#[i]
+    endif
+endfor
+range = max_v - min_v
+if range < 0.0001
+    range = 1
+endif
+for i from 1 to nFrames
+    feat_f2#[i] = (feat_f2#[i] - min_v) / range
+endfor
+
+# Intensity
+min_v = feat_intensity#[1]
+max_v = feat_intensity#[1]
+for i from 2 to nFrames
+    if feat_intensity#[i] < min_v
+        min_v = feat_intensity#[i]
+    endif
+    if feat_intensity#[i] > max_v
+        max_v = feat_intensity#[i]
+    endif
+endfor
+range = max_v - min_v
+if range < 0.0001
+    range = 1
+endif
+for i from 1 to nFrames
+    feat_intensity#[i] = (feat_intensity#[i] - min_v) / range
+endfor
+
+# HNR
+min_v = feat_hnr#[1]
+max_v = feat_hnr#[1]
+for i from 2 to nFrames
+    if feat_hnr#[i] < min_v
+        min_v = feat_hnr#[i]
+    endif
+    if feat_hnr#[i] > max_v
+        max_v = feat_hnr#[i]
+    endif
+endfor
+range = max_v - min_v
+if range < 0.0001
+    range = 1
+endif
+for i from 1 to nFrames
+    feat_hnr#[i] = (feat_hnr#[i] - min_v) / range
+endfor
+
+# Pitch
+max_pitch = 0
+for i from 1 to nFrames
+    if feat_pitch#[i] > max_pitch
+        max_pitch = feat_pitch#[i]
+    endif
+endfor
+if max_pitch < 1
+    max_pitch = 600
+endif
+for i from 1 to nFrames
+    if feat_pitch#[i] > 0
+        feat_pitch#[i] = feat_pitch#[i] / max_pitch
+        if feat_pitch#[i] > 1
+            feat_pitch#[i] = 1
+        endif
+    endif
+endfor
+
+# Final clamp
+for i from 1 to nFrames
+    feat_mfcc_1#[i] = max(0, min(1, feat_mfcc_1#[i]))
+    feat_mfcc_2#[i] = max(0, min(1, feat_mfcc_2#[i]))
+    feat_mfcc_3#[i] = max(0, min(1, feat_mfcc_3#[i]))
+    feat_f1#[i] = max(0, min(1, feat_f1#[i]))
+    feat_f2#[i] = max(0, min(1, feat_f2#[i]))
+    feat_intensity#[i] = max(0, min(1, feat_intensity#[i]))
+    feat_hnr#[i] = max(0, min(1, feat_hnr#[i]))
+    feat_pitch#[i] = max(0, min(1, feat_pitch#[i]))
+endfor
+
+# ============================================
+# BUILD PATTERN AND TRAIN FFNET
+# ============================================
+
+appendInfoLine: "Training neural network..."
+
+n_features = 8
+Create TableOfReal: "Features", nFrames, n_features
+feat_table = selected("TableOfReal")
+
+for i from 1 to nFrames
+    selectObject: feat_table
+    Set value: i, 1, feat_mfcc_1#[i]
+    Set value: i, 2, feat_mfcc_2#[i]
+    Set value: i, 3, feat_mfcc_3#[i]
+    Set value: i, 4, feat_f1#[i]
+    Set value: i, 5, feat_f2#[i]
+    Set value: i, 6, feat_intensity#[i]
+    Set value: i, 7, feat_hnr#[i]
+    Set value: i, 8, feat_pitch#[i]
+endfor
+
+selectObject: feat_table
+To Matrix
+feat_matrix = selected("Matrix")
+To Pattern: 1
+pattern = selected("PatternList")
+
+selectObject: pattern
+Formula: "if self < 0 then 0 else if self > 1 then 1 else self fi fi"
+
+Create Categories: "Targets"
+categories = selected("Categories")
+
+for i from 1 to nFrames
+    selectObject: categories
+    if cat_vowel#[i] = 1
         Append category: "vowel"
-    elsif int_val > silence_intensity_threshold and hnr_val < fricative_hnr_max and f0_val = 0
-        Append category: "fricative"
+    elsif cat_consonant#[i] = 1
+        Append category: "consonant"
+    elsif cat_silence#[i] = 1
+        Append category: "silence"
     else
         Append category: "other"
     endif
 endfor
 
-# ===== NORMALIZE FEATURES =====
-selectObject: feature_matrix
-cols = n_features
-for j from 1 to cols
-    col_min = 1e30
-    col_max = -1e30
-    for i from 1 to rows_target
-        val = Get value: i, j
-        if val <> undefined
-            if val < col_min
-                col_min = val
-            endif
-            if val > col_max
-                col_max = val
-            endif
-        endif
-    endfor
-    range = col_max - col_min
-    if range = 0
-        range = 1
-    endif
-    for i from 1 to rows_target
-        val = Get value: i, j
-        if val <> undefined
-            norm = (val - col_min) / range
-            Set value: i, j, norm
-        else
-             Set value: i, j, 0
-        endif
-    endfor
-endfor
-
-# ===== FFNET TRAINING (OPTIMIZED) =====
-writeInfoLine: "Training Neural Network..."
-
-selectObject: feature_matrix
-To Matrix
-feature_matrix_m = selected("Matrix")
-To Pattern: 1
-pattern = selected("PatternList")
-
 selectObject: pattern
-plusObject: output_categories
-To FFNet: hidden_units, 0
-ffnet = selected("FFNet")
+plusObject: categories
+ffnet = To FFNet: hidden_units, 0
 
-total_trained = 0
-stale_chunks = 0
 prev_cost = 1e9
-early_stopped = 0
+stale = 0
+iter = 0
+chunk = 100
 
-while total_trained < training_iterations
+while iter < training_iterations
     selectObject: ffnet
     plusObject: pattern
-    plusObject: output_categories
-    Learn: train_chunk, learning_rate, "Minimum-squared-error"
+    plusObject: categories
+    Learn: chunk, learning_rate, "Minimum-squared-error"
     
-    # Fast Early Stopping
     current_cost = Get total costs: "Minimum-squared-error"
     
-    # Check convergence
-    delta = abs(prev_cost - current_cost)
-    if delta < (prev_cost * early_stop_ratio)
-        stale_chunks = stale_chunks + 1
+    if abs(prev_cost - current_cost) < prev_cost * 0.001
+        stale += 1
     else
-        stale_chunks = 0
+        stale = 0
     endif
     
     prev_cost = current_cost
-    total_trained = total_trained + train_chunk
+    iter += chunk
     
-    if stale_chunks >= early_stop_patience
-        early_stopped = 1
-        total_trained = training_iterations 
-    endif
-    
-    if total_trained mod 500 == 0
-        appendInfoLine: "Iter: ", total_trained, " Cost: ", fixed$(current_cost, 4)
+    if stale >= 5
+        appendInfoLine: "  Converged at iteration ", iter
+        iter = training_iterations + 1
     endif
 endwhile
 
-# ===== ACTIVATIONS & MIXING =====
-writeInfoLine: "Generating Harmony Voices..."
+appendInfoLine: "  Training complete"
 
 selectObject: ffnet
 plusObject: pattern
@@ -322,239 +579,293 @@ activations = selected("Activation")
 To Matrix
 activation_matrix = selected("Matrix")
 
-# Create IntensityTiers
-Create IntensityTier: "tier_v1", 0, duration
-tier1 = selected("IntensityTier")
-Create IntensityTier: "tier_v2", 0, duration
-tier2 = selected("IntensityTier")
-Create IntensityTier: "tier_v3", 0, duration
-tier3 = selected("IntensityTier")
-Create IntensityTier: "tier_v4", 0, duration
-tier4 = selected("IntensityTier")
+# Extract weights
+weight_vowel# = zero#(nFrames)
+weight_consonant# = zero#(nFrames)
+weight_other# = zero#(nFrames)
+weight_silence# = zero#(nFrames)
 
-# Calculate mix
-for i from 1 to rows_target
-    t = frame_step_seconds * (i - 0.5)
-    
+for i from 1 to nFrames
     selectObject: activation_matrix
     a1 = Get value in cell: i, 1
     a2 = Get value in cell: i, 2
     a3 = Get value in cell: i, 3
     a4 = Get value in cell: i, 4
     
-    # Manual Softmax
-    tdiv = temperature
-    if tdiv < 0.001
-        tdiv = 0.001
+    t_div = max(0.001, temperature)
+    max_a = max(a1, max(a2, max(a3, a4)))
+    
+    e1 = exp((a1 - max_a) / t_div)
+    e2 = exp((a2 - max_a) / t_div)
+    e3 = exp((a3 - max_a) / t_div)
+    e4 = exp((a4 - max_a) / t_div)
+    
+    sum_e = e1 + e2 + e3 + e4
+    if sum_e < 0.001
+        sum_e = 1
     endif
     
-    max_a = a1
-    if a2 > max_a
-        max_a = a2
-    endif
-    if a3 > max_a
-        max_a = a3
-    endif
-    if a4 > max_a
-        max_a = a4
-    endif
-    
-    e1 = exp((a1 - max_a)/tdiv) * enable_vowel
-    e2 = exp((a2 - max_a)/tdiv) * enable_fric
-    e3 = exp((a3 - max_a)/tdiv) * enable_other
-    e4 = exp((a4 - max_a)/tdiv) * enable_silence
-    
-    sum = e1 + e2 + e3 + e4
-    if sum = 0
-        sum = 1
-    endif
-    
-    w1 = e1 / sum
-    w2 = e2 / sum
-    w3 = e3 / sum
-    w4 = e4 / sum
-    
-    # Adaptive Voice Boost
-    mix1 = w1 * vowel_mix
-    mix2 = w2 * fric_mix
-    mix3 = w3 * other_mix
-    mix4 = w4 * silence_mix
-    
-    # Add to tiers (dB conversion handled here: 70dB base)
-    db1 = if mix1 > 0.001 then 20*log10(mix1)+70 else 0 fi
-    db2 = if mix2 > 0.001 then 20*log10(mix2)+70 else 0 fi
-    db3 = if mix3 > 0.001 then 20*log10(mix3)+70 else 0 fi
-    db4 = if mix4 > 0.001 then 20*log10(mix4)+70 else 0 fi
-    
-    selectObject: tier1
-    Add point: t, db1
-    selectObject: tier2
-    Add point: t, db2
-    selectObject: tier3
-    Add point: t, db3
-    selectObject: tier4
-    Add point: t, db4
+    weight_vowel#[i] = e1 / sum_e
+    weight_consonant#[i] = e2 / sum_e
+    weight_other#[i] = e3 / sum_e
+    weight_silence#[i] = e4 / sum_e
 endfor
 
-# ===== SMART PITCH SHIFTING (Global Scope Fix) =====
-appendInfoLine: "Pitch shifting voices..."
+removeObject: feat_table, feat_matrix, pattern, categories, ffnet, activations, activation_matrix
 
-# Initialize IDs
-h1 = 0
-h2 = 0
-h3 = 0
-h4 = 0
+# ============================================
+# SMOOTH WEIGHTS
+# ============================================
 
-for voice_idx from 1 to 4
-    # Determine settings based on index
-    if voice_idx == 1
-        semi = vowel_semitones
-        voice_name$ = "vowel_voice"
-    elsif voice_idx == 2
-        semi = fric_semitones
-        voice_name$ = "fric_voice"
-    elsif voice_idx == 3
-        semi = other_semitones
-        voice_name$ = "other_voice"
-    else
-        semi = silence_semitones
-        voice_name$ = "silence_voice"
-    endif
-
-    # Create the voice
-    if semi == 0
-        selectObject: sound
-        Copy: voice_name$
-        current_id = selected("Sound")
-    else
-        selectObject: sound
-        To Manipulation: 0.01, 75, 600
-        manip = selected("Manipulation")
-        Create PitchTier: "shift", 0, duration
-        ptier = selected("PitchTier")
-        Add point: 0, 100
-        Add point: duration, 100
-        Formula: "self * 2^('semi'/12)"
-        
-        selectObject: manip
-        plusObject: ptier
-        Replace pitch tier
-        selectObject: manip
-        Get resynthesis (overlap-add)
-        Rename: voice_name$
-        current_id = selected("Sound")
-        
-        removeObject: manip, ptier
-    endif
-    
-    # Assign back to global variable
-    if voice_idx == 1
-        h1 = current_id
-    elsif voice_idx == 2
-        h2 = current_id
-    elsif voice_idx == 3
-        h3 = current_id
-    elsif voice_idx == 4
-        h4 = current_id
-    endif
-endfor
-
-# ===== APPLY ENVELOPES & MIX =====
-appendInfoLine: "Mixing..."
-
-selectObject: h1
-plusObject: tier1
-Multiply
-m1 = selected("Sound")
-Rename: "m_vowel"
-
-selectObject: h2
-plusObject: tier2
-Multiply
-m2 = selected("Sound")
-Rename: "m_fric"
-
-selectObject: h3
-plusObject: tier3
-Multiply
-m3 = selected("Sound")
-Rename: "m_other"
-
-selectObject: h4
-plusObject: tier4
-Multiply
-m4 = selected("Sound")
-Rename: "m_silence"
-
-selectObject: sound
-Copy: "final_mix"
-mix_out = selected("Sound")
-
-# Sum the processed voices
-Formula: "Sound_m_vowel[] + Sound_m_fric[] + Sound_m_other[] + Sound_m_silence[]"
-
-# Add Dry signal and create output
-if create_stereo
-    selectObject: sound
-    Copy: "Dry_L"
-    dry = selected("Sound")
-    
-    selectObject: dry
-    plusObject: mix_out
-    Combine to stereo
-    final_out = selected("Sound")
-    Rename: sound_name$ + "_harmonized_stereo"
-    removeObject: dry, mix_out
-else
-    # Mono Mix
-    selectObject: sound
-    plusObject: mix_out
-    Combine to stereo
-    Convert to mono
-    final_out = selected("Sound")
-    Rename: sound_name$ + "_harmonized_mono"
-    removeObject: mix_out
+smooth_frames = round(smoothing_ms / (frame_step_sec * 1000))
+if smooth_frames < 1
+    smooth_frames = 1
 endif
 
-selectObject: final_out
+weight_vowel_smooth# = zero#(nFrames)
+weight_consonant_smooth# = zero#(nFrames)
+weight_other_smooth# = zero#(nFrames)
+
+for i from 1 to nFrames
+    i1 = max(1, i - smooth_frames)
+    i2 = min(nFrames, i + smooth_frames)
+    n = i2 - i1 + 1
+    
+    sum_v = 0
+    sum_c = 0
+    sum_o = 0
+    
+    for k from i1 to i2
+        sum_v += weight_vowel#[k]
+        sum_c += weight_consonant#[k]
+        sum_o += weight_other#[k]
+    endfor
+    
+    weight_vowel_smooth#[i] = sum_v / n
+    weight_consonant_smooth#[i] = sum_c / n
+    weight_other_smooth#[i] = sum_o / n
+endfor
+
+# ============================================
+# CREATE PITCH-SHIFTED VOICES
+# ============================================
+
+appendInfoLine: "Creating harmony voices..."
+
+# Voice 1: Vowel interval 1
+if vowel_interval_1 <> 0
+    selectObject: workSnd
+    manip1 = To Manipulation: 0.01, 75, 600
+    pt1 = Create PitchTier: "shift1", 0, duration
+    Add point: 0, 100
+    Add point: duration, 100
+    Formula: "self * 2^(" + string$(vowel_interval_1) + "/12)"
+    selectObject: manip1
+    plusObject: pt1
+    Replace pitch tier
+    selectObject: manip1
+    voice1 = Get resynthesis (overlap-add)
+    removeObject: manip1, pt1
+else
+    selectObject: workSnd
+    voice1 = Copy: "v1"
+endif
+selectObject: voice1
+Rename: "HarmVoice1"
+
+# Voice 2: Vowel interval 2
+if vowel_interval_2 <> 0
+    selectObject: workSnd
+    manip2 = To Manipulation: 0.01, 75, 600
+    pt2 = Create PitchTier: "shift2", 0, duration
+    Add point: 0, 100
+    Add point: duration, 100
+    Formula: "self * 2^(" + string$(vowel_interval_2) + "/12)"
+    selectObject: manip2
+    plusObject: pt2
+    Replace pitch tier
+    selectObject: manip2
+    voice2 = Get resynthesis (overlap-add)
+    removeObject: manip2, pt2
+    selectObject: voice2
+    Rename: "HarmVoice2"
+    has_voice2 = 1
+else
+    has_voice2 = 0
+    voice2 = 0
+endif
+
+# Voice 3: Consonant interval
+if consonant_interval <> 0
+    selectObject: workSnd
+    manip3 = To Manipulation: 0.01, 75, 600
+    pt3 = Create PitchTier: "shift3", 0, duration
+    Add point: 0, 100
+    Add point: duration, 100
+    Formula: "self * 2^(" + string$(consonant_interval) + "/12)"
+    selectObject: manip3
+    plusObject: pt3
+    Replace pitch tier
+    selectObject: manip3
+    voice3 = Get resynthesis (overlap-add)
+    removeObject: manip3, pt3
+else
+    selectObject: workSnd
+    voice3 = Copy: "v3"
+endif
+selectObject: voice3
+Rename: "HarmVoice3"
+
+# Voice 4: Other interval
+if other_interval <> 0
+    selectObject: workSnd
+    manip4 = To Manipulation: 0.01, 75, 600
+    pt4 = Create PitchTier: "shift4", 0, duration
+    Add point: 0, 100
+    Add point: duration, 100
+    Formula: "self * 2^(" + string$(other_interval) + "/12)"
+    selectObject: manip4
+    plusObject: pt4
+    Replace pitch tier
+    selectObject: manip4
+    voice4 = Get resynthesis (overlap-add)
+    removeObject: manip4, pt4
+else
+    selectObject: workSnd
+    voice4 = Copy: "v4"
+endif
+selectObject: voice4
+Rename: "HarmVoice4"
+
+# ============================================
+# MIX VOICES WITH ENVELOPE (Frame-by-frame)
+# ============================================
+
+appendInfoLine: "Mixing voices..."
+
+# Create output buffer
+wet_mix = Create Sound from formula: "Wet", 1, 0, duration, fs, "0"
+
+# Mix voices frame by frame using Formula (part)
+for i from 1 to nFrames
+    t_start = (i - 1) * frame_step_sec
+    t_end = i * frame_step_sec
+    if t_end > duration
+        t_end = duration
+    endif
+    if t_start >= t_end
+        t_start = t_end - 0.001
+    endif
+    
+    # Calculate mix weights for this frame
+    v_gain = weight_vowel_smooth#[i] * vowel_level
+    c_gain = weight_consonant_smooth#[i] * consonant_level
+    o_gain = weight_other_smooth#[i] * other_level
+    
+    # Build formula string
+    selectObject: wet_mix
+    Formula (part): t_start, t_end, 1, 1,
+        ... "Sound_HarmVoice1(x) * " + string$(v_gain) + 
+        ... " + Sound_HarmVoice3(x) * " + string$(c_gain) +
+        ... " + Sound_HarmVoice4(x) * " + string$(o_gain)
+endfor
+
+# Add voice2 if exists
+if has_voice2
+    for i from 1 to nFrames
+        t_start = (i - 1) * frame_step_sec
+        t_end = i * frame_step_sec
+        if t_end > duration
+            t_end = duration
+        endif
+        if t_start >= t_end
+            t_start = t_end - 0.001
+        endif
+        
+        v2_gain = weight_vowel_smooth#[i] * vowel_level * 0.7
+        
+        selectObject: wet_mix
+        Formula (part): t_start, t_end, 1, 1,
+            ... "self + Sound_HarmVoice2(x) * " + string$(v2_gain)
+    endfor
+endif
+
+# Cleanup voices
+removeObject: voice1, voice3, voice4
+if has_voice2
+    removeObject: voice2
+endif
+
+# ============================================
+# FINAL MIX (Wet/Dry)
+# ============================================
+
+appendInfoLine: "Creating final mix..."
+
+selectObject: wet_mix
+Scale peak: 0.9
+Rename: "WetMix"
+
+if stereo_output
+    dry_gain = 1 - wet_dry_mix
+    wet_gain = wet_dry_mix
+    
+    left_dry = dry_gain * (1 - stereo_width * 0.5)
+    left_wet = wet_gain * (1 + stereo_width * 0.5)
+    right_dry = dry_gain * (1 + stereo_width * 0.5)
+    right_wet = wet_gain * (1 - stereo_width * 0.5)
+    
+    selectObject: workSnd
+    left_ch = Copy: "Left"
+    selectObject: left_ch
+    Formula: "self * " + string$(left_dry) + " + Sound_WetMix(x) * " + string$(left_wet)
+    
+    selectObject: workSnd
+    right_ch = Copy: "Right"
+    selectObject: right_ch
+    Formula: "self * " + string$(right_dry) + " + Sound_WetMix(x) * " + string$(right_wet)
+    
+    selectObject: left_ch, right_ch
+    finalOut = Combine to stereo
+    Rename: sound_name$ + "_harmonized_stereo"
+    
+    removeObject: left_ch, right_ch
+else
+    dry_gain = 1 - wet_dry_mix
+    wet_gain = wet_dry_mix
+    
+    selectObject: workSnd
+    finalOut = Copy: "Final"
+    selectObject: finalOut
+    Formula: "self * " + string$(dry_gain) + " + Sound_WetMix(x) * " + string$(wet_gain)
+    Rename: sound_name$ + "_harmonized"
+endif
+
+selectObject: finalOut
 Scale peak: 0.99
 
-# ===== CLEANUP =====
-procedure safeRemove .id
-    if .id > 0
-        selectObject: .id
-        Remove
-    endif
-endproc
+# ============================================
+# CLEANUP
+# ============================================
 
-call safeRemove: pitch
-call safeRemove: intensity
-call safeRemove: formant
-call safeRemove: mfcc
-call safeRemove: harmonicity
-call safeRemove: feature_matrix
-call safeRemove: feature_matrix_m
-call safeRemove: pattern
-call safeRemove: output_categories
-call safeRemove: ffnet
-call safeRemove: activations
-call safeRemove: activation_matrix
-call safeRemove: tier1
-call safeRemove: tier2
-call safeRemove: tier3
-call safeRemove: tier4
-call safeRemove: h1
-call safeRemove: h2
-call safeRemove: h3
-call safeRemove: h4
-call safeRemove: m1
-call safeRemove: m2
-call safeRemove: m3
-call safeRemove: m4
+removeObject: workSnd, wet_mix
+
+selectObject: sound
+plusObject: finalOut
+
+appendInfoLine: ""
+appendInfoLine: "=== COMPLETE ==="
+selectObject: finalOut
+n_ch = Get number of channels
+out_dur = Get total duration
+appendInfoLine: "Output: ", selected$("Sound")
+appendInfoLine: "Duration: ", fixed$(out_dur, 2), " s"
+appendInfoLine: "Channels: ", n_ch
 
 if play_result
-    selectObject: final_out
+    appendInfoLine: "Playing..."
+    selectObject: finalOut
     Play
 endif
 
-selectObject: final_out
+selectObject: finalOut
