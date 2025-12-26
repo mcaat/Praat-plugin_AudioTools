@@ -1,77 +1,121 @@
 # ============================================================
-# Praat AudioTools - Neural Phonetic Speed Mapper.praat
+# Praat AudioTools - Neural Phonetic Speed Mapper
 # Author: Shai Cohen
 # Affiliation: Department of Music, Bar-Ilan University, Israel
 # Email: shai.cohen@biu.ac.il
-# Version: 0.1 (2025)
+# Version: 0.2 (2025) - Optimized
 # License: MIT License
 # Repository: https://github.com/ShaiCohen-ops/Praat-plugin_AudioTools
 #
 # Description:
-#   Neural Phonetic Speed Mapper (FFNet, Adaptive++) script
-#
-# Usage:
-#   Select a Sound object in Praat and run this script.
-#   Adjust parameters via the form dialog.
+#   Neural Phonetic Speed Mapper - Applies different time stretch
+#   factors to different phonetic categories (vowels, consonants, etc.)
 #
 # Citation:
 #   Cohen, S. (2025). Praat AudioTools: An Offline Analysis–Resynthesis Toolkit for Experimental Composition.
 #   https://github.com/ShaiCohen-ops/Praat-plugin_AudioTools
 # ============================================================
 
-# Neural Phonetic Speed Mapper (Lite Interface)
-# - Clean UI: Only essential controls shown
-# - High Speed: Optimized batch processing and early stopping
-# - Robust: Fixed variable case sensitivity
-
-form Neural Speed Mapper
-    comment Speed Multipliers (1.0 = Normal, >1.0 = Faster, <1.0 = Slower):
-    positive speed_vowel 3.2
-    positive speed_fric 0.3
-    positive speed_other 2.4
-    positive speed_silence 1.0
-
-    comment Toggles (Uncheck to keep original speed for that sound):
-    boolean enable_vowel 1
-    boolean enable_fric 1
-    boolean enable_other 1
-    boolean enable_silence 1
-
-    comment Output:
-    boolean play_result 1
+form Neural Phonetic Speed Mapper
+    comment === Preset ===
+    optionmenu Preset 1
+        option Manual (Use Settings Below)
+        option Speech Clarity
+        option Vowel Stretch
+        option Consonant Emphasis
+        option Time Compress
+        option Dreamy Slow
+        option Rhythmic Stutter
+        option Fast Forward
+    
+    comment === Stretch Factors (>1 = longer, <1 = shorter) ===
+    positive Vowel_stretch 0.5
+    positive Consonant_stretch 2.0
+    positive Other_stretch 0.8
+    positive Silence_stretch 1.0
+    
+    comment === Processing ===
+    positive Smoothing_ms 20
+    positive Temperature 0.4
+    
+    comment === Output ===
+    boolean Play_result 1
 endform
 
-# ==========================================
-# ADVANCED PARAMETERS (Hidden from UI)
-# You can edit these manually if needed
-# ==========================================
-confidence_threshold = 0.10
-smooth_ms = 20
-change_tolerance = 0.03
-min_seg_ms = 35
-max_gap_ms = 100
-contrast_gain = 2.2
-temperature = 0.5
-voiced_boost = 0.35
+# ============================================
+# PRESET LOGIC
+# ============================================
 
-# Network Settings
-hidden_units = 24
-training_iterations = 1000
-train_chunk = 100
-early_stop_delta = 0.005
-early_stop_patience = 3
+if preset$ = "Speech Clarity"
+    vowel_stretch = 1.3
+    consonant_stretch = 1.8
+    other_stretch = 1.2
+    silence_stretch = 0.8
+    smoothing_ms = 25
+    temperature = 0.35
+
+elsif preset$ = "Vowel Stretch"
+    vowel_stretch = 2.0
+    consonant_stretch = 1.0
+    other_stretch = 1.2
+    silence_stretch = 1.0
+    smoothing_ms = 30
+    temperature = 0.3
+
+elsif preset$ = "Consonant Emphasis"
+    vowel_stretch = 0.8
+    consonant_stretch = 2.5
+    other_stretch = 1.5
+    silence_stretch = 0.7
+    smoothing_ms = 15
+    temperature = 0.4
+
+elsif preset$ = "Time Compress"
+    vowel_stretch = 0.6
+    consonant_stretch = 0.7
+    other_stretch = 0.65
+    silence_stretch = 0.3
+    smoothing_ms = 20
+    temperature = 0.5
+
+elsif preset$ = "Dreamy Slow"
+    vowel_stretch = 2.5
+    consonant_stretch = 1.5
+    other_stretch = 2.0
+    silence_stretch = 1.8
+    smoothing_ms = 40
+    temperature = 0.25
+
+elsif preset$ = "Rhythmic Stutter"
+    vowel_stretch = 0.4
+    consonant_stretch = 3.0
+    other_stretch = 0.5
+    silence_stretch = 2.0
+    smoothing_ms = 10
+    temperature = 0.5
+
+elsif preset$ = "Fast Forward"
+    vowel_stretch = 0.5
+    consonant_stretch = 0.5
+    other_stretch = 0.5
+    silence_stretch = 0.2
+    smoothing_ms = 15
+    temperature = 0.4
+endif
+
+# Hidden parameters
+frame_step_sec = 0.005
+hidden_units = 16
+training_iterations = 800
 learning_rate = 0.001
-
-# Analysis Settings
-frame_step_seconds = 0.005
-max_formant_hz = 5500
 vowel_hnr_threshold = 5.0
 fricative_hnr_max = 3.0
-silence_intensity_threshold = 45
-force_every_frames = 2
-# ==========================================
+silence_threshold = 45
 
-# ===== INIT =====
+# ============================================
+# SETUP
+# ============================================
+
 nSelected = numberOfSelected("Sound")
 if nSelected <> 1
     exitScript: "Please select exactly one Sound object."
@@ -82,302 +126,398 @@ sound_name$ = selected$("Sound")
 
 selectObject: sound
 duration = Get total duration
-sampling_rate = Get sampling frequency
+fs = Get sampling frequency
 
-if duration < frame_step_seconds
-    exitScript: "Error: Sound duration too short."
+if duration < 0.1
+    exitScript: "Sound is too short (minimum 0.1 seconds)."
 endif
 
-# Preserve original, work on copy
+writeInfoLine: "=== NEURAL PHONETIC SPEED MAPPER ==="
+appendInfoLine: "Preset: ", preset$
+appendInfoLine: "Vowel: ", vowel_stretch, "x | Consonant: ", consonant_stretch, "x"
+appendInfoLine: "Other: ", other_stretch, "x | Silence: ", silence_stretch, "x"
+appendInfoLine: "======================================"
+appendInfoLine: ""
+
+# Work on mono copy
 selectObject: sound
-Copy: "Analysis_Copy"
-sound_work = selected("Sound")
+workSnd = Convert to mono
+Rename: "Work"
 
-# ===== ANALYSIS (BATCH MODE) =====
-writeInfoLine: "Analyzing audio features..."
+# ============================================
+# FEATURE EXTRACTION (Native Arrays)
+# ============================================
 
-selectObject: sound_work
-To Pitch: 0, 75, 600
-pitch = selected("Pitch")
+appendInfoLine: "Analyzing phonetic features..."
 
-selectObject: sound_work
-To Intensity: 75, 0, "yes"
-intensity = selected("Intensity")
-
-selectObject: sound_work
-To Formant (burg): 0, 5, max_formant_hz, 0.025, 50
-formant = selected("Formant")
-
-selectObject: sound_work
-To MFCC: 12, 0.025, frame_step_seconds, 100, 100, 0
-mfcc = selected("MFCC")
-
-selectObject: sound_work
-To Harmonicity (cc): frame_step_seconds, 75, 0.1, 1.0
-harmonicity = selected("Harmonicity")
-
-selectObject: mfcc
-nFrames = Get number of frames
-if nFrames <= 0
-    exitScript: "Error: No frames generated."
+nFrames = floor(duration / frame_step_sec)
+if nFrames < 10
+    nFrames = 10
 endif
 
-rows_target = nFrames
-n_features = 18
+# Feature arrays
+feat_mfcc_1# = zero#(nFrames)
+feat_mfcc_2# = zero#(nFrames)
+feat_mfcc_3# = zero#(nFrames)
+feat_f1# = zero#(nFrames)
+feat_f2# = zero#(nFrames)
+feat_intensity# = zero#(nFrames)
+feat_hnr# = zero#(nFrames)
+feat_pitch# = zero#(nFrames)
+frame_time# = zero#(nFrames)
 
-# ===== FEATURE EXTRACTION =====
-Create TableOfReal: "features", rows_target, n_features
-feature_matrix = selected("TableOfReal")
+# Category arrays
+cat_vowel# = zero#(nFrames)
+cat_consonant# = zero#(nFrames)
+cat_other# = zero#(nFrames)
+cat_silence# = zero#(nFrames)
 
-# Batch: MFCC
-selectObject: mfcc
-for i from 1 to rows_target
-    for c from 1 to 12
-        v = Get value in frame: i, c
+# Create analysis objects
+selectObject: workSnd
+pitch_obj = To Pitch: 0, 75, 600
+
+selectObject: workSnd
+intensity_obj = To Intensity: 75, 0, "yes"
+
+selectObject: workSnd
+formant_obj = To Formant (burg): 0, 5, 5500, 0.025, 50
+
+selectObject: workSnd
+mfcc_obj = To MFCC: 12, 0.025, frame_step_sec, 100, 100, 0
+
+selectObject: workSnd
+hnr_obj = To Harmonicity (cc): frame_step_sec, 75, 0.1, 1.0
+
+selectObject: mfcc_obj
+nFrames_mfcc = Get number of frames
+
+# Extract RAW features
+for i from 1 to nFrames
+    t = (i - 0.5) * frame_step_sec
+    frame_time#[i] = t
+    
+    # MFCCs
+    iM = min(i, nFrames_mfcc)
+    selectObject: mfcc_obj
+    for c from 1 to 3
+        v = Get value in frame: iM, c
         if v = undefined
             v = 0
         endif
-        # Map cols
-        col_idx = 0
-        if c <= 3
-            col_idx = c
+        if c = 1
+            feat_mfcc_1#[i] = v
+        elsif c = 2
+            feat_mfcc_2#[i] = v
         else
-            col_idx = 9 + c - 3
+            feat_mfcc_3#[i] = v
         endif
-        selectObject: feature_matrix
-        Set value: i, col_idx, v
-        selectObject: mfcc
     endfor
-endfor
-
-# Batch: Formants
-selectObject: formant
-for i from 1 to rows_target
-    t = frame_step_seconds * (i - 0.5)
+    
+    # Formants
+    selectObject: formant_obj
     f1 = Get value at time: 1, t, "Hertz", "Linear"
     f2 = Get value at time: 2, t, "Hertz", "Linear"
-    f3 = Get value at time: 3, t, "Hertz", "Linear"
     if f1 = undefined
         f1 = 500
     endif
     if f2 = undefined
         f2 = 1500
     endif
-    if f3 = undefined
-        f3 = 2500
-    endif
-    selectObject: feature_matrix
-    Set value: i, 4, f1 / 1000
-    Set value: i, 5, f2 / 1000
-    Set value: i, 6, f3 / 1000
-    selectObject: formant
-endfor
-
-# Batch: Intensity
-selectObject: intensity
-for i from 1 to rows_target
-    t = frame_step_seconds * (i - 0.5)
-    v = Get value at time: t, "cubic"
-    if v = undefined
-        v = 60
-    endif
-    selectObject: feature_matrix
-    Set value: i, 7, (v - 60) / 20
-    selectObject: intensity
-endfor
-
-# Batch: Harmonicity
-selectObject: harmonicity
-for i from 1 to rows_target
-    t = frame_step_seconds * (i - 0.5)
-    v = Get value at time: t, "cubic"
-    if v = undefined
-        v = 0
-    endif
-    selectObject: feature_matrix
-    Set value: i, 8, v / 20
-    selectObject: harmonicity
-endfor
-
-# Batch: Pitch
-selectObject: pitch
-for i from 1 to rows_target
-    t = frame_step_seconds * (i - 0.5)
-    v = Get value at time: t, "Hertz", "Linear"
-    if v = undefined or v <= 0
-        z = 0.5
-    else
-        z = v / 500
-        if z <= 0
-            z = 0.5
-        endif
-    endif
-    selectObject: feature_matrix
-    Set value: i, 9, z
-    selectObject: pitch
-endfor
-
-# ===== CATEGORIZATION =====
-Create Categories: "output_categories"
-output_categories = selected("Categories")
-
-# Temp table for raw data
-Create TableOfReal: "RawData", rows_target, 4
-raw_data = selected("TableOfReal")
-
-# Fill Temp Table
-selectObject: intensity
-for i from 1 to rows_target
-    t = frame_step_seconds * (i - 0.5)
-    v = Get value at time: t, "cubic"
-    if v = undefined
-        v = -100
-    endif
-    selectObject: raw_data
-    Set value: i, 1, v
-    selectObject: intensity
-endfor
-
-selectObject: harmonicity
-for i from 1 to rows_target
-    t = frame_step_seconds * (i - 0.5)
-    v = Get value at time: t, "cubic"
-    if v = undefined
-        v = -100
-    endif
-    selectObject: raw_data
-    Set value: i, 2, v
-    selectObject: harmonicity
-endfor
-
-selectObject: pitch
-for i from 1 to rows_target
-    t = frame_step_seconds * (i - 0.5)
-    v = Get value at time: t, "Hertz", "Linear"
-    if v = undefined
-        v = 0
-    endif
-    selectObject: raw_data
-    Set value: i, 3, v
-    selectObject: pitch
-endfor
-
-selectObject: formant
-for i from 1 to rows_target
-    t = frame_step_seconds * (i - 0.5)
-    v = Get value at time: 1, t, "Hertz", "Linear"
-    if v = undefined
-        v = 500
-    endif
-    selectObject: raw_data
-    Set value: i, 4, v
-    selectObject: formant
-endfor
-
-# Generate Categories Logic
-selectObject: raw_data
-for i from 1 to rows_target
-    int_val = Get value: i, 1
-    hnr_val = Get value: i, 2
-    f0_val  = Get value: i, 3
-    f1_val  = Get value: i, 4
+    feat_f1#[i] = f1
+    feat_f2#[i] = f2
     
-    selectObject: output_categories
-    if int_val < silence_intensity_threshold
-        Append category: "silence"
-    elsif hnr_val > vowel_hnr_threshold and f0_val > 0 and f1_val > 300
-        Append category: "vowel"
-    elsif int_val > silence_intensity_threshold and hnr_val < fricative_hnr_max and f0_val = 0
-        Append category: "fricative"
+    # Intensity
+    selectObject: intensity_obj
+    iv = Get value at time: t, "cubic"
+    if iv = undefined
+        iv = 50
+    endif
+    feat_intensity#[i] = iv
+    
+    # HNR
+    selectObject: hnr_obj
+    hnr = Get value at time: t, "cubic"
+    if hnr = undefined
+        hnr = 0
+    endif
+    feat_hnr#[i] = hnr
+    
+    # Pitch
+    selectObject: pitch_obj
+    f0 = Get value at time: t, "Hertz", "Linear"
+    if f0 = undefined or f0 <= 0
+        feat_pitch#[i] = 0
     else
-        Append category: "other"
+        feat_pitch#[i] = f0
     endif
-    selectObject: raw_data
+    
+    # Classify frame
+    if iv < silence_threshold
+        cat_silence#[i] = 1
+    elsif hnr > vowel_hnr_threshold and f0 > 0 and f1 > 300
+        cat_vowel#[i] = 1
+    elsif iv > silence_threshold and hnr < fricative_hnr_max and f0 <= 0
+        cat_consonant#[i] = 1
+    else
+        cat_other#[i] = 1
+    endif
 endfor
 
-selectObject: raw_data
-Remove
+removeObject: pitch_obj, intensity_obj, formant_obj, mfcc_obj, hnr_obj
 
-# ===== NORMALIZE =====
-selectObject: feature_matrix
-cols = n_features
-for j from 1 to cols
-    col_min = 1e30
-    col_max = -1e30
-    for i from 1 to rows_target
-        val = Get value: i, j
-        if val <> undefined
-            if val < col_min
-                col_min = val
-            endif
-            if val > col_max
-                col_max = val
-            endif
-        endif
-    endfor
-    range = col_max - col_min
-    if range = 0
-        range = 1
+appendInfoLine: "  ", nFrames, " frames analyzed"
+
+# ============================================
+# NORMALIZE ALL FEATURES TO [0, 1]
+# ============================================
+
+appendInfoLine: "Normalizing features..."
+
+# MFCC 1
+min_v = feat_mfcc_1#[1]
+max_v = feat_mfcc_1#[1]
+for i from 2 to nFrames
+    if feat_mfcc_1#[i] < min_v
+        min_v = feat_mfcc_1#[i]
     endif
-    for i from 1 to rows_target
-        val = Get value: i, j
-        if val <> undefined
-            norm = (val - col_min) / range
-            Set value: i, j, norm
-        else
-            Set value: i, j, 0
-        endif
-    endfor
+    if feat_mfcc_1#[i] > max_v
+        max_v = feat_mfcc_1#[i]
+    endif
+endfor
+range = max_v - min_v
+if range < 0.0001
+    range = 1
+endif
+for i from 1 to nFrames
+    feat_mfcc_1#[i] = (feat_mfcc_1#[i] - min_v) / range
 endfor
 
-# ===== TRAINING (FAST EARLY STOP) =====
-writeInfoLine: "Training Neural Network..."
+# MFCC 2
+min_v = feat_mfcc_2#[1]
+max_v = feat_mfcc_2#[1]
+for i from 2 to nFrames
+    if feat_mfcc_2#[i] < min_v
+        min_v = feat_mfcc_2#[i]
+    endif
+    if feat_mfcc_2#[i] > max_v
+        max_v = feat_mfcc_2#[i]
+    endif
+endfor
+range = max_v - min_v
+if range < 0.0001
+    range = 1
+endif
+for i from 1 to nFrames
+    feat_mfcc_2#[i] = (feat_mfcc_2#[i] - min_v) / range
+endfor
 
-selectObject: feature_matrix
+# MFCC 3
+min_v = feat_mfcc_3#[1]
+max_v = feat_mfcc_3#[1]
+for i from 2 to nFrames
+    if feat_mfcc_3#[i] < min_v
+        min_v = feat_mfcc_3#[i]
+    endif
+    if feat_mfcc_3#[i] > max_v
+        max_v = feat_mfcc_3#[i]
+    endif
+endfor
+range = max_v - min_v
+if range < 0.0001
+    range = 1
+endif
+for i from 1 to nFrames
+    feat_mfcc_3#[i] = (feat_mfcc_3#[i] - min_v) / range
+endfor
+
+# F1
+min_v = feat_f1#[1]
+max_v = feat_f1#[1]
+for i from 2 to nFrames
+    if feat_f1#[i] < min_v
+        min_v = feat_f1#[i]
+    endif
+    if feat_f1#[i] > max_v
+        max_v = feat_f1#[i]
+    endif
+endfor
+range = max_v - min_v
+if range < 0.0001
+    range = 1
+endif
+for i from 1 to nFrames
+    feat_f1#[i] = (feat_f1#[i] - min_v) / range
+endfor
+
+# F2
+min_v = feat_f2#[1]
+max_v = feat_f2#[1]
+for i from 2 to nFrames
+    if feat_f2#[i] < min_v
+        min_v = feat_f2#[i]
+    endif
+    if feat_f2#[i] > max_v
+        max_v = feat_f2#[i]
+    endif
+endfor
+range = max_v - min_v
+if range < 0.0001
+    range = 1
+endif
+for i from 1 to nFrames
+    feat_f2#[i] = (feat_f2#[i] - min_v) / range
+endfor
+
+# Intensity
+min_v = feat_intensity#[1]
+max_v = feat_intensity#[1]
+for i from 2 to nFrames
+    if feat_intensity#[i] < min_v
+        min_v = feat_intensity#[i]
+    endif
+    if feat_intensity#[i] > max_v
+        max_v = feat_intensity#[i]
+    endif
+endfor
+range = max_v - min_v
+if range < 0.0001
+    range = 1
+endif
+for i from 1 to nFrames
+    feat_intensity#[i] = (feat_intensity#[i] - min_v) / range
+endfor
+
+# HNR
+min_v = feat_hnr#[1]
+max_v = feat_hnr#[1]
+for i from 2 to nFrames
+    if feat_hnr#[i] < min_v
+        min_v = feat_hnr#[i]
+    endif
+    if feat_hnr#[i] > max_v
+        max_v = feat_hnr#[i]
+    endif
+endfor
+range = max_v - min_v
+if range < 0.0001
+    range = 1
+endif
+for i from 1 to nFrames
+    feat_hnr#[i] = (feat_hnr#[i] - min_v) / range
+endfor
+
+# Pitch
+max_pitch = 0
+for i from 1 to nFrames
+    if feat_pitch#[i] > max_pitch
+        max_pitch = feat_pitch#[i]
+    endif
+endfor
+if max_pitch < 1
+    max_pitch = 600
+endif
+for i from 1 to nFrames
+    if feat_pitch#[i] > 0
+        feat_pitch#[i] = feat_pitch#[i] / max_pitch
+        if feat_pitch#[i] > 1
+            feat_pitch#[i] = 1
+        endif
+    endif
+endfor
+
+# Final clamp to [0, 1]
+for i from 1 to nFrames
+    feat_mfcc_1#[i] = max(0, min(1, feat_mfcc_1#[i]))
+    feat_mfcc_2#[i] = max(0, min(1, feat_mfcc_2#[i]))
+    feat_mfcc_3#[i] = max(0, min(1, feat_mfcc_3#[i]))
+    feat_f1#[i] = max(0, min(1, feat_f1#[i]))
+    feat_f2#[i] = max(0, min(1, feat_f2#[i]))
+    feat_intensity#[i] = max(0, min(1, feat_intensity#[i]))
+    feat_hnr#[i] = max(0, min(1, feat_hnr#[i]))
+    feat_pitch#[i] = max(0, min(1, feat_pitch#[i]))
+endfor
+
+# ============================================
+# BUILD PATTERN AND TRAIN FFNET
+# ============================================
+
+appendInfoLine: "Training neural network..."
+
+n_features = 8
+Create TableOfReal: "Features", nFrames, n_features
+feat_table = selected("TableOfReal")
+
+for i from 1 to nFrames
+    selectObject: feat_table
+    Set value: i, 1, feat_mfcc_1#[i]
+    Set value: i, 2, feat_mfcc_2#[i]
+    Set value: i, 3, feat_mfcc_3#[i]
+    Set value: i, 4, feat_f1#[i]
+    Set value: i, 5, feat_f2#[i]
+    Set value: i, 6, feat_intensity#[i]
+    Set value: i, 7, feat_hnr#[i]
+    Set value: i, 8, feat_pitch#[i]
+endfor
+
+selectObject: feat_table
 To Matrix
-feature_matrix_m = selected("Matrix")
+feat_matrix = selected("Matrix")
 To Pattern: 1
 pattern = selected("PatternList")
 
 selectObject: pattern
-plusObject: output_categories
-To FFNet: hidden_units, 0
-ffnet = selected("FFNet")
+Formula: "if self < 0 then 0 else if self > 1 then 1 else self fi fi"
 
-total_trained = 0
-stale_chunks = 0
+Create Categories: "Targets"
+categories = selected("Categories")
+
+for i from 1 to nFrames
+    selectObject: categories
+    if cat_vowel#[i] = 1
+        Append category: "vowel"
+    elsif cat_consonant#[i] = 1
+        Append category: "consonant"
+    elsif cat_silence#[i] = 1
+        Append category: "silence"
+    else
+        Append category: "other"
+    endif
+endfor
+
+selectObject: pattern
+plusObject: categories
+ffnet = To FFNet: hidden_units, 0
+
 prev_cost = 1e9
-early_stopped = 0
+stale = 0
+iter = 0
+chunk = 100
 
-while total_trained < training_iterations
+while iter < training_iterations
     selectObject: ffnet
     plusObject: pattern
-    plusObject: output_categories
-    Learn: train_chunk, learning_rate, "Minimum-squared-error"
+    plusObject: categories
+    Learn: chunk, learning_rate, "Minimum-squared-error"
     
     current_cost = Get total costs: "Minimum-squared-error"
     
-    delta = abs(prev_cost - current_cost)
-    if delta < early_stop_delta
-        stale_chunks = stale_chunks + 1
+    if abs(prev_cost - current_cost) < prev_cost * 0.001
+        stale += 1
     else
-        stale_chunks = 0
+        stale = 0
     endif
     
     prev_cost = current_cost
-    total_trained = total_trained + train_chunk
+    iter += chunk
     
-    if stale_chunks >= early_stop_patience
-        early_stopped = 1
-        total_trained = training_iterations
-    endif
-    
-    if total_trained mod 200 == 0
-        appendInfoLine: "Iter: ", total_trained, " Cost: ", fixed$(current_cost, 4)
+    if stale >= 5
+        appendInfoLine: "  Converged at iteration ", iter
+        iter = training_iterations + 1
     endif
 endwhile
 
-# ===== INFERENCE =====
+appendInfoLine: "  Training complete"
+
 selectObject: ffnet
 plusObject: pattern
 To ActivationList: 1
@@ -385,252 +525,160 @@ activations = selected("Activation")
 To Matrix
 activation_matrix = selected("Matrix")
 
-# ===== MAPPING SPEED =====
-selectObject: sound_work
-Copy: sound_name$ + "_neural_speed"
-output_sound = selected("Sound")
+# Extract weights to arrays
+weight_vowel# = zero#(nFrames)
+weight_consonant# = zero#(nFrames)
+weight_other# = zero#(nFrames)
+weight_silence# = zero#(nFrames)
 
-durationTier = Create DurationTier: "ffnet_dur", 0, duration
-selectObject: durationTier
-
-Create TableOfReal: "frameFactor", rows_target, 1
-frameFactor = selected("TableOfReal")
-
-for iframe from 1 to rows_target
+for i from 1 to nFrames
     selectObject: activation_matrix
-    a1 = Get value in cell: iframe, 1
-    a2 = Get value in cell: iframe, 2
-    a3 = Get value in cell: iframe, 3
-    a4 = Get value in cell: iframe, 4
+    a1 = Get value in cell: i, 1
+    a2 = Get value in cell: i, 2
+    a3 = Get value in cell: i, 3
+    a4 = Get value in cell: i, 4
     
-    # Enable/Disable Masks
-    if enable_vowel = 0
-        a1 = -100
-    endif
-    if enable_fric = 0
-        a2 = -100
-    endif
-    if enable_other = 0
-        a3 = -100
-    endif
-    if enable_silence = 0
-        a4 = -100
-    endif
-
-    # Softmax
-    tdiv = temperature
-    if tdiv <= 0.0001
-        tdiv = 0.0001
+    t_div = max(0.001, temperature)
+    max_a = max(a1, max(a2, max(a3, a4)))
+    
+    e1 = exp((a1 - max_a) / t_div)
+    e2 = exp((a2 - max_a) / t_div)
+    e3 = exp((a3 - max_a) / t_div)
+    e4 = exp((a4 - max_a) / t_div)
+    
+    sum_e = e1 + e2 + e3 + e4
+    if sum_e < 0.001
+        sum_e = 1
     endif
     
-    max_a = a1
-    if a2 > max_a
-        max_a = a2
-    endif
-    if a3 > max_a
-        max_a = a3
-    endif
-    if a4 > max_a
-        max_a = a4
-    endif
-    
-    e1 = exp((a1-max_a) / tdiv)
-    e2 = exp((a2-max_a) / tdiv)
-    e3 = exp((a3-max_a) / tdiv)
-    e4 = exp((a4-max_a) / tdiv)
-    denom = e1 + e2 + e3 + e4
-    if denom <= 0
-        denom = 1e-12
-    endif
-    w1 = e1 / denom
-    w2 = e2 / denom
-    w3 = e3 / denom
-    w4 = e4 / denom
-
-    # Calculate Speed
-    s1 = speed_vowel
-    s2 = speed_fric
-    s3 = speed_other
-    s4 = speed_silence
-    
-    # Revert disabled to neutral speed
-    if enable_vowel = 0
-        s1 = 1.0
-    endif
-    if enable_fric = 0
-        s2 = 1.0
-    endif
-    if enable_other = 0
-        s3 = 1.0
-    endif
-    if enable_silence = 0
-        s4 = 1.0
-    endif
-
-    weighted = w1*s1 + w2*s2 + w3*s3 + w4*s4
-
-    # Adaptive Boost
-    selectObject: feature_matrix
-    norm_hnr = Get value: iframe, 8
-    norm_f0 = Get value: iframe, 9
-    
-    voicedness = (norm_hnr * 0.5) + (norm_f0 * 0.5) 
-    adapt_weight = 1 + voiced_boost * (voicedness - 0.5) * 2
-    
-    weighted = 1 + adapt_weight * (weighted - 1)
-    
-    max_prob = w1
-    if w2 > max_prob
-        max_prob = w2
-    endif
-    if w3 > max_prob
-        max_prob = w3
-    endif
-    if w4 > max_prob
-        max_prob = w4
-    endif
-    
-    mix = (max_prob - confidence_threshold) / (1 - confidence_threshold)
-    if mix < 0
-        mix = 0
-    endif
-    if mix > 1
-        mix = 1
-    endif
-
-    factor = 1 + contrast_gain * mix * (weighted - 1)
-    
-    selectObject: frameFactor
-    Set value: iframe, 1, factor
+    weight_vowel#[i] = e1 / sum_e
+    weight_consonant#[i] = e2 / sum_e
+    weight_other#[i] = e3 / sum_e
+    weight_silence#[i] = e4 / sum_e
 endfor
 
-# ===== SMOOTHING & DURATION TIER =====
-Create TableOfReal: "frameFactorSm", rows_target, 1
-frameFactorSm = selected("TableOfReal")
+removeObject: feat_table, feat_matrix, pattern, categories, ffnet, activations, activation_matrix
 
-win = round(smooth_ms / (1000 * frame_step_seconds))
-if win < 1
-    win = 1
+# ============================================
+# CALCULATE STRETCH FACTORS
+# ============================================
+
+appendInfoLine: "Calculating stretch factors..."
+
+stretch_factor# = zero#(nFrames)
+
+for i from 1 to nFrames
+    # Weighted combination of stretch factors
+    factor = weight_vowel#[i] * vowel_stretch +
+        ... weight_consonant#[i] * consonant_stretch +
+        ... weight_other#[i] * other_stretch +
+        ... weight_silence#[i] * silence_stretch
+    
+    # Clamp to reasonable range
+    factor = max(0.1, min(10, factor))
+    
+    stretch_factor#[i] = factor
+endfor
+
+# ============================================
+# SMOOTH STRETCH FACTORS
+# ============================================
+
+smooth_frames = round(smoothing_ms / (frame_step_sec * 1000))
+if smooth_frames < 1
+    smooth_frames = 1
 endif
 
-for i from 1 to rows_target
-    i1 = i - win
-    if i1 < 1
-        i1 = 1
-    endif
-    i2 = i + win
-    if i2 > rows_target
-        i2 = rows_target
-    endif
+stretch_smooth# = zero#(nFrames)
+
+for i from 1 to nFrames
+    i1 = max(1, i - smooth_frames)
+    i2 = min(nFrames, i + smooth_frames)
+    n = i2 - i1 + 1
     
-    sumv = 0
-    countv = 0
+    sum_s = 0
     for k from i1 to i2
-        selectObject: frameFactor
-        v = Get value: k, 1
-        sumv = sumv + v
-        countv = countv + 1
+        sum_s += stretch_factor#[k]
     endfor
-    sm = sumv / countv
-    selectObject: frameFactorSm
-    Set value: i, 1, sm
+    
+    stretch_smooth#[i] = sum_s / n
 endfor
 
-# Write to DurationTier
-min_seg = min_seg_ms / 1000
-max_gap = max_gap_ms / 1000
-segments_written = 0
+# ============================================
+# BUILD DURATION TIER
+# ============================================
 
-selectObject: frameFactorSm
-v0 = Get value: 1, 1
-if v0 = undefined
-    v0 = 1.0
-endif
+appendInfoLine: "Building duration tier..."
 
-last_written_factor = v0
-last_write_t = 0
-cum_change = 0
-last_forced_i = 1
+durationTier = Create DurationTier: "stretch", 0, duration
+
+# Add points at regular intervals with smoothed values
+point_interval = 0.02  ; 20ms between points
+last_t = -1
 
 selectObject: durationTier
-Add point: 0, v0
+Add point: 0, stretch_smooth#[1]
 
-for i from 2 to rows_target
-    frame_center = frame_step_seconds * (i - 0.5)
-    t = frame_center
-
-    selectObject: frameFactorSm
-    v = Get value: i, 1
+for i from 1 to nFrames
+    t = frame_time#[i]
     
-    dv = abs(v - last_written_factor)
-    cum_change = cum_change + dv
-    time_since = t - last_write_t
-    
-    do_force = 0
-    if (i - last_forced_i) >= force_every_frames and time_since >= min_seg
-        do_force = 1
-    endif
-
-    if ( (cum_change >= change_tolerance and time_since >= min_seg) or (time_since >= max_gap) or (do_force = 1) )
+    if t - last_t >= point_interval
+        # Convert stretch factor to duration factor
+        # DurationTier: >1 means output is longer (stretched)
+        # Our stretch_factor: >1 means we want it longer
+        # So they match directly
+        
+        dur_factor = stretch_smooth#[i]
+        
         selectObject: durationTier
-        Add point: t, v
-        last_written_factor = v
-        last_write_t = t
-        last_forced_i = i
-        cum_change = 0
-        segments_written = segments_written + 1
+        Add point: t, dur_factor
+        last_t = t
     endif
 endfor
 
 selectObject: durationTier
-Add point: duration, last_written_factor
+Add point: duration, stretch_smooth#[nFrames]
 
-# ===== RESYNTHESIS =====
-selectObject: output_sound
-To Manipulation: 0.01, 75, 600
-manip = selected("Manipulation")
+# ============================================
+# RESYNTHESIS
+# ============================================
+
+appendInfoLine: "Resynthesizing..."
+
+selectObject: workSnd
+manip = To Manipulation: 0.01, 75, 600
 
 selectObject: manip
 plusObject: durationTier
 Replace duration tier
 
 selectObject: manip
-Get resynthesis (overlap-add)
-resynth = selected("Sound")
-Rename: sound_name$ + "_neural_speed_mapped"
+finalOut = Get resynthesis (overlap-add)
+Rename: sound_name$ + "_speed_mapped"
 Scale peak: 0.99
 
-# ===== CLEANUP & REPORT =====
-appendInfoLine: "Processing Complete."
-appendInfoLine: "Modified segments: ", segments_written
+# ============================================
+# CLEANUP
+# ============================================
 
-procedure safeRemove .id
-    if .id > 0
-        selectObject: .id
-        Remove
-    endif
-endproc
+removeObject: workSnd, manip, durationTier
 
-call safeRemove: sound_work
-call safeRemove: pitch
-call safeRemove: intensity
-call safeRemove: formant
-call safeRemove: mfcc
-call safeRemove: harmonicity
-call safeRemove: feature_matrix
-call safeRemove: feature_matrix_m
-call safeRemove: pattern
-call safeRemove: output_categories
-call safeRemove: ffnet
-call safeRemove: activations
-call safeRemove: activation_matrix
-call safeRemove: frameFactor
-call safeRemove: frameFactorSm
-call safeRemove: durationTier
-call safeRemove: manip
-call safeRemove: output_sound
+selectObject: sound
+plusObject: finalOut
+
+appendInfoLine: ""
+appendInfoLine: "=== COMPLETE ==="
+selectObject: finalOut
+out_dur = Get total duration
+appendInfoLine: "Output: ", selected$("Sound")
+appendInfoLine: "Original duration: ", fixed$(duration, 2), " s"
+appendInfoLine: "New duration: ", fixed$(out_dur, 2), " s"
+appendInfoLine: "Ratio: ", fixed$(out_dur / duration, 2), "x"
 
 if play_result
-    selectObject: resynth
+    appendInfoLine: "Playing..."
+    selectObject: finalOut
     Play
 endif
+
+selectObject: finalOut
